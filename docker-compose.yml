@@ -1,0 +1,20 @@
+services:
+  localstack:
+    image: localstack/localstack:3.2
+    container_name: atlasflow-localstack
+    ports:
+      - "4566:4566"   # LocalStack edge port
+      - "4510-4559:4510-4559" # ports for individual services 
+    environment:
+      - DEBUG=0
+      - PERSISTENCE=1
+      - SERVICES=s3,sqs,sns,dynamodb,lambda,iam,logs,cloudwatch,ssm,sts
+      - AWS_DEFAULT_REGION=${AWS_REGION:-us-east-1}
+    volumes:
+      - "./.localstack:/var/lib/localstack"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:4566/_localstack/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
