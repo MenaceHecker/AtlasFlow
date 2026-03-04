@@ -62,4 +62,12 @@ infra-destroy:
 smoke:
 	bash scripts/smoke.sh
 
+ddb:
+	bash scripts/create_ddb.sh
+
+smoke: infra ddb
+	bash scripts/smoke.sh
+
 clean: down infra-destroy
+
+

@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Load repo env if present
+if [ -f "$(dirname "$0")/../.env" ]; then
+  set -a
+  source "$(dirname "$0")/../.env"
+  set +a
+fi
+
 ENDPOINT="${LOCALSTACK_ENDPOINT:-http://127.0.0.1:4566}"
 REGION="${AWS_REGION:-us-east-1}"
 PROJECT="${TF_VAR_project_name:-atlasflow}"
