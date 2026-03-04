@@ -1,5 +1,11 @@
 SHELL := /bin/bash
 
+ifneq (,$(wildcard .env))
+  include .env
+  export
+endif
+
+
 .PHONY: docker-check
 docker-check:
 	@docker info >/dev/null 2>&1 || (echo "Docker daemon not running. Start Docker Desktop and retry." && exit 1)
@@ -7,7 +13,7 @@ docker-check:
 
 PROJECT ?= atlasflow
 AWS_REGION ?= us-east-1
-LOCALSTACK_ENDPOINT ?= http://localhost:4566
+LOCALSTACK_ENDPOINT ?= http://127.0.0.1:4566
 
 export AWS_REGION
 export AWS_DEFAULT_REGION=$(AWS_REGION)

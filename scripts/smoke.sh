@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ENDPOINT="${LOCALSTACK_ENDPOINT:-http://localhost:4566}"
+ENDPOINT="${LOCALSTACK_ENDPOINT:-http://127.0.0.1:4566}"
 REGION="${AWS_REGION:-us-east-1}"
 PROJECT="${TF_VAR_project_name:-atlasflow}"
 
@@ -20,7 +20,7 @@ fi
 
 BUCKET=$(cd infra && terraform output -raw s3_payload_bucket)
 QUEUE_URL=$(cd infra && terraform output -raw sqs_events_queue_url)
-EVENTS_TABLE=$(cd infra && terraform output -raw ddb_events_table)
+EVENTS_TABLE="${PROJECT}-events"
 
 echo "==> Using bucket: $BUCKET"
 echo "==> Using queue : $QUEUE_URL"
