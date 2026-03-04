@@ -30,11 +30,10 @@ echo "==> Using table : $EVENTS_TABLE"
 TMPFILE=$(mktemp)
 echo "{\"hello\":\"atlasflow\"}" > "$TMPFILE"
 
-aws --region "$REGION" --endpoint-url "$ENDPOINT" s3api put-object \
-  --bucket "$BUCKET" \
-  --key "smoke/hello.json" \
-  --body "$TMPFILE" >/dev/null
-echo "✅ S3 put-object OK"
+# 1) Put an object into S3 (use curl to avoid awscli checksum trailers)
+curl -sf -X PUT --data-binary @"$TMPFILE" \
+  "$ENDPOINT/$BUCKET/smoke/hello.json" >/dev/null
+echo "✅ S3 put-object OK (curl)"
 
 # 2) Sending message to SQS
 MSG_BODY="{\"event_id\":\"smoke-$(date +%s)\",\"s3_key\":\"smoke/hello.json\"}"
