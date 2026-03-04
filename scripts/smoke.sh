@@ -30,8 +30,11 @@ echo "==> Using table : $EVENTS_TABLE"
 TMPFILE=$(mktemp)
 echo "{\"hello\":\"atlasflow\"}" > "$TMPFILE"
 
-aws --region "$REGION" --endpoint-url "$ENDPOINT" s3 cp "$TMPFILE" "s3://$BUCKET/smoke/hello.json" >/dev/null
-echo "S3 put-object OK"
+aws --region "$REGION" --endpoint-url "$ENDPOINT" s3api put-object \
+  --bucket "$BUCKET" \
+  --key "smoke/hello.json" \
+  --body "$TMPFILE" >/dev/null
+echo "✅ S3 put-object OK"
 
 # 2) Sending message to SQS
 MSG_BODY="{\"event_id\":\"smoke-$(date +%s)\",\"s3_key\":\"smoke/hello.json\"}"
