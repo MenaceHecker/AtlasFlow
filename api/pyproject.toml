@@ -1,0 +1,16 @@
+[project]
+name = "atlasflow-api"
+version = "0.1.0"
+description = "AtlasFlow FastAPI ingestion service LocalStack"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.110",
+  "uvicorn[standard]>=0.27",
+  "pydantic>=2.6",
+  "boto3>=1.34",
+  "botocore>=1.34",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
