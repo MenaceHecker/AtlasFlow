@@ -76,3 +76,5 @@ api-logs:
 api-shell:
 	docker compose exec api /bin/bash
 
+fmt:
+	terraform -chdir=infra fmt -recursive
