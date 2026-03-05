@@ -18,3 +18,21 @@ services:
       interval: 5s
       timeout: 3s
       retries: 30
+  api:
+    build:
+      context: ./api
+    container_name: atlasflow-api
+    environment:
+      - LOCALSTACK_ENDPOINT=http://localstack:4566
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - AWS_DEFAULT_REGION=${AWS_REGION:-us-east-1}
+      - TF_VAR_project_name=${TF_VAR_project_name:-atlasflow}
+      - PROJECT_NAME=atlasflow
+      - EVENTS_QUEUE_NAME=${TF_VAR_project_name:-atlasflow}-events
+      - EVENTS_TABLE=${TF_VAR_project_name:-atlasflow}-events
+      - IDEMPOTENCY_TABLE=${TF_VAR_project_name:-atlasflow}-idempotency
+    ports:
+      - "8000:8000"
+    depends_on:
+      localstack:
+        condition: service_healthy
