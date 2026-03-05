@@ -1,0 +1,13 @@
+[project]
+name = "atlasflow-worker"
+version = "0.1.0"
+description = "AtlasFlow SQS worker (LocalStack)"
+requires-python = ">=3.11"
+dependencies = [
+  "boto3>=1.34",
+  "botocore>=1.34",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
