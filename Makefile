@@ -70,4 +70,9 @@ smoke: infra ddb
 
 clean: down infra-destroy
 
+api-logs:
+	docker compose logs -f api
+
+api-shell:
+	docker compose exec api /bin/bash
 
