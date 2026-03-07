@@ -19,7 +19,7 @@ def _pk(event_id: str) -> str:
 def transition_to_processing(event_id: str) -> bool:
     """
     Conditional update prevents double-processing under at-least-once delivery.
-    Returns True if we successfully claimed it, False if it was already claimed/finished.
+    Returns True if we successfully claimed it, False if it was already finished.
     """
     table = _events_table()
     try:
@@ -40,3 +40,13 @@ def transition_to_processing(event_id: str) -> bool:
         if e.response.get("Error", {}).get("Code") == "ConditionalCheckFailedException":
             return False
         raise
+
+
+def mark_completed(event_id: str, result: Dict[str, Any]) -> None:
+    table = _events_table()
+    table.update_item(
+        Key={"pk": _pk(event_id)},
+        UpdateExpression="SET #s = :c, updatedAt = :u, result = :r",
+        ExpressionAttributeNames={"#s": "status"},
+        ExpressionAttributeValues={":c": "COMPLETED", ":u": _now_iso(), ":r": result},
+    )
