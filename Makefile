@@ -78,3 +78,6 @@ api-shell:
 
 fmt:
 	terraform -chdir=infra fmt -recursive
+
+worker-logs:
+	docker compose logs -f worker
