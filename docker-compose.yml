@@ -36,3 +36,20 @@ services:
     depends_on:
       localstack:
         condition: service_healthy
+  worker:
+    build:
+      context: ./worker
+    container_name: atlasflow-worker
+    environment:
+      - LOCALSTACK_ENDPOINT=http://localstack:4566
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - AWS_DEFAULT_REGION=${AWS_REGION:-us-east-1}
+      - TF_VAR_project_name=${TF_VAR_project_name:-atlasflow}
+      - EVENTS_QUEUE_NAME=${TF_VAR_project_name:-atlasflow}-events
+      - EVENTS_TABLE=${TF_VAR_project_name:-atlasflow}-events
+      - POLL_WAIT_SECONDS=5
+      - MAX_MESSAGES=5
+      - VISIBILITY_TIMEOUT=30
+    depends_on:
+      localstack:
+        condition: service_healthy
