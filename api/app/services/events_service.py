@@ -37,7 +37,7 @@ def _get_queue_url() -> str:
 def create_event(event_type: str, payload: Dict[str, Any], idempotency_key: Optional[str]) -> Tuple[str, bool]:
     """
     Returns: (event_id, reused)
-    reused=True if idempotency key already existed and we returned existing event_id.
+    If reused == True if idempotency key already existed and we returned existing event_id.
     """
     now = _now_iso()
 
