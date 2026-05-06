@@ -41,7 +41,7 @@ def create_event(event_type: str, payload: Dict[str, Any], idempotency_key: Opti
     """
     now = _now_iso()
 
-    # If no idempotency key, always create a new event
+    # If no idempotency key, then attempt to create a new event
     if not idempotency_key:
         event_id = str(uuid.uuid4())
         _persist_and_enqueue(event_id, event_type, payload, now)
@@ -69,7 +69,7 @@ def create_event(event_type: str, payload: Dict[str, Any], idempotency_key: Opti
         if e.response.get("Error", {}).get("Code") != "ConditionalCheckFailedException":
             raise
 
-        # If key existseturn original eventId
+        # If key exists, return original eventId
         existing = idem.get_item(Key={"pk": idem_pk}).get("Item")
         if not existing or "eventId" not in existing:
             # Edge case can be existed but missing eventId so treating as new
