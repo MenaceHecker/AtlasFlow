@@ -4,6 +4,7 @@ import json
 import time
 import uuid
 from datetime import datetime, timezone
+from functools import lru_cache
 from typing import Any, Dict, Optional, Tuple
 
 from botocore.exceptions import ClientError
@@ -28,6 +29,7 @@ def _idem_table():
     return ddb_resource().Table(settings.idem_table)
 
 
+@lru_cache(maxsize=1)
 def _get_queue_url() -> str:
     sqs = sqs_client()
     resp = sqs.get_queue_url(QueueName=settings.events_queue_name)
@@ -56,8 +58,8 @@ def create_event(event_type: str, payload: Dict[str, Any], idempotency_key: Opti
         idem.put_item(
             Item={
                 "pk": idem_pk,
-                "eventId": new_event_id,
-                "createdAt": now,
+                "event_id": new_event_id,
+                "created_at": now,
                 "ttl": _ttl_epoch_seconds(60),  # 60 min TTL (tune later)
             },
             ConditionExpression="attribute_not_exists(pk)",
@@ -71,12 +73,12 @@ def create_event(event_type: str, payload: Dict[str, Any], idempotency_key: Opti
 
         # If key exists, return original eventId
         existing = idem.get_item(Key={"pk": idem_pk}).get("Item")
-        if not existing or "eventId" not in existing:
+        if not existing or "event_id" not in existing:
             # Edge case can be existed but missing eventId so treating as new
             _persist_and_enqueue(new_event_id, event_type, payload, now)
             return new_event_id, False
 
-        return existing["eventId"], True
+        return existing["event_id"], True
 
 
 def _persist_and_enqueue(event_id: str, event_type: str, payload: Dict[str, Any], now_iso: str) -> None:
@@ -86,13 +88,13 @@ def _persist_and_enqueue(event_id: str, event_type: str, payload: Dict[str, Any]
     pk = f"EVENT#{event_id}"
     item = {
         "pk": pk,
-        "eventId": event_id,
+        "event_id": event_id,
         "type": event_type,
         "status": "CREATED",
-        "createdAt": now_iso,
-        "updatedAt": now_iso,
+        "created_at": now_iso,
+        "updated_at": now_iso,
         "attempts": 0,
-        "payloadInline": payload,
+        "payload_inline": payload,
     }
 
     events.put_item(Item=item)
@@ -133,8 +135,10 @@ def list_events(status: Optional[str], limit: int, last_pk: Optional[str]) -> Di
         }
         if last_pk:
             # For GSI, LEK must match index keys as LocalStack can be picky
-            # skipping complex LEK and just return first page for now
-            pass
+            kwargs["ExclusiveStartKey"] = {
+                "status": status,
+                "pk": last_pk
+            }
 
         resp = events.query(**kwargs)
     else:
