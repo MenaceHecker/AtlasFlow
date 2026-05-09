@@ -53,8 +53,8 @@ def mark_completed(event_id: str, result: Dict[str, Any]) -> None:
     table = _events_table()
     table.update_item(
         Key={"pk": _pk(event_id)},
-        UpdateExpression="SET #s = :c, updatedAt = :u, result = :r",
-        ExpressionAttributeNames={"#s": "status"},
+        UpdateExpression="SET #s = :c, updatedAt = :u, #r = :r",
+        ExpressionAttributeNames={"#s": "status", "#r": "result"},
         ExpressionAttributeValues={":c": "COMPLETED", ":u": _now_iso(), ":r": result},
     )
 
@@ -62,8 +62,8 @@ def mark_failed(event_id: str, err: str) -> None:
     table = _events_table()
     table.update_item(
         Key={"pk": _pk(event_id)},
-        UpdateExpression="SET #s = :f, updatedAt = :u, error = :e",
-        ExpressionAttributeNames={"#s": "status"},
+        UpdateExpression="SET #s = :f, updatedAt = :u, #e = :e",
+        ExpressionAttributeNames={"#s": "status", "#e": "error"},
         ExpressionAttributeValues={":f": "FAILED", ":u": _now_iso(), ":e": err},
     )
 
