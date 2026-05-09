@@ -14,12 +14,18 @@ def _boto_config() -> Config:
     )
 
 
+def _endpoint_url() -> str | None:
+    """Return None when the endpoint is unset so moto / real AWS work transparently."""
+    url = settings.localstack_endpoint.strip()
+    return url if url else None
+
+
 @lru_cache(maxsize=1)
 def ddb_resource():
     return boto3.resource(
         "dynamodb",
         region_name=settings.aws_region,
-        endpoint_url=settings.localstack_endpoint,
+        endpoint_url=_endpoint_url(),
         config=_boto_config(),
         aws_access_key_id="test",      # Consider pulling from env for production
         aws_secret_access_key="test",  # Consider pulling from env for production
@@ -31,7 +37,7 @@ def sqs_client():
     return boto3.client(
         "sqs",
         region_name=settings.aws_region,
-        endpoint_url=settings.localstack_endpoint,
+        endpoint_url=_endpoint_url(),
         config=_boto_config(),
         aws_access_key_id="test",
         aws_secret_access_key="test",
