@@ -13,7 +13,7 @@ from app.services.aws_clients import ddb_resource
 
 
 def _now_iso() -> str:
-    return datetime.now(datetime.timezone.utc).isoformat()
+    return datetime.now(timezone.utc).isoformat()
 
 
 def _events_table():
