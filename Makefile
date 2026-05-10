@@ -19,7 +19,7 @@ export AWS_REGION
 export AWS_DEFAULT_REGION=$(AWS_REGION)
 export LOCALSTACK_ENDPOINT
 
-.PHONY: up down logs infra infra-destroy fmt validate smoke clean help
+.PHONY: up down logs infra infra-destroy fmt validate smoke clean help test test-api test-worker
 
 help:
 	@echo "Targets:"
@@ -32,6 +32,9 @@ help:
 	@echo "  make fmt           Terraform fmt"
 	@echo "  make smoke         Run smoke test (S3+SQS+DDB)"
 	@echo "  make clean         Tear down + destroy infra"
+	@echo "  make test          Run all unit tests (no LocalStack needed)"
+	@echo "  make test-api      Run only API tests"
+	@echo "  make test-worker   Run only worker tests"
 
 up:
 	@cp -n .env.example .env >/dev/null 2>&1 || true
@@ -81,3 +84,11 @@ fmt:
 
 worker-logs:
 	docker compose logs -f worker
+
+test-api:
+	cd api && pip install -q -e ".[dev]" && pytest
+
+test-worker:
+	cd worker && pip install -q -e ".[dev]" && pytest
+
+test: test-api test-worker
