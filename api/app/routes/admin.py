@@ -1,14 +1,20 @@
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from typing import Dict, Any
 
+from app.core.dependencies import require_admin_key
+from app.core.config import settings
 from app.services.aws_clients import sqs_client
 
-router = APIRouter(prefix="/v1/admin", tags=["admin"])
+router = APIRouter(
+    prefix="/v1/admin",
+    tags=["admin"],
+    dependencies=[Depends(require_admin_key)],  # applied to every route in this router
+)
 
-MAIN_QUEUE_NAME = "atlasflow-events"
-DLQ_NAME = "atlasflow-dlq"
+DLQ_NAME = f"{settings.project_name}-dlq"
+MAIN_QUEUE_NAME = f"{settings.project_name}-events"
 
 
 def _queue_url(queue_name: str) -> str:
