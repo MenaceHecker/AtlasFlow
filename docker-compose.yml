@@ -31,6 +31,7 @@ services:
       - EVENTS_QUEUE_NAME=${TF_VAR_project_name:-atlasflow}-events
       - EVENTS_TABLE=${TF_VAR_project_name:-atlasflow}-events
       - IDEMPOTENCY_TABLE=${TF_VAR_project_name:-atlasflow}-idempotency
+      - ADMIN_API_KEY=${ADMIN_API_KEY:-}
     ports:
       - "8000:8000"
     depends_on:
