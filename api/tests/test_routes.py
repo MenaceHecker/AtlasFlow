@@ -66,6 +66,45 @@ class TestGetEventById:
         assert resp.status_code == 404
 
 
+class TestEventDetailShape:
+    """Assert the public API shape — no internal DDB fields should leak through."""
+
+    def test_no_internal_fields_exposed(self, api_client):
+        create_resp = api_client.post(
+            "/v1/events", json={"type": "shape.test", "payload": {"x": "one"}}
+        )
+        event_id = create_resp.json()["event_id"]
+
+        body = api_client.get(f"/v1/events/{event_id}").json()
+
+        # internal storage fields must not be present
+        assert "pk" not in body
+        assert "payload_inline" not in body
+        assert "updatedAt" not in body
+
+        # expected public fields must be present
+        assert body["event_id"] == event_id
+        assert body["type"] == "shape.test"
+        assert body["status"] == "CREATED"
+        assert "created_at" in body
+        assert "updated_at" in body
+        assert "attempts" in body
+        assert body["payload"] == {"x": "one"}
+
+    def test_list_items_have_clean_shape(self, api_client):
+        api_client.post("/v1/events", json={"type": "list.shape", "payload": {"y": 2}})
+
+        items = api_client.get("/v1/events?status=CREATED").json()["items"]
+        assert len(items) >= 1
+
+        for item in items:
+            assert "pk" not in item
+            assert "payload_inline" not in item
+            assert "event_id" in item
+            assert "status" in item
+            assert "payload" in item
+
+
 # ── GET /v1/events ────────────────────────────────────────────────────────────
 
 class TestListEvents:
