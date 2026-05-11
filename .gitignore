@@ -13,3 +13,5 @@ infra/crash.log
 .DS_Store
 .idea/
 .vscode/
+*.egg-info/
+__pycache__/
