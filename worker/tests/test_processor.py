@@ -22,14 +22,13 @@ class TestTransitionToProcessing:
         claimed = transition_to_processing(event_id)
         assert claimed is True
 
-        # verify DDB record was updated
         item = aws_resources["events_table"].get_item(
             Key={"pk": f"EVENT#{event_id}"}
         )["Item"]
         assert item["status"] == "PROCESSING"
 
     def test_double_claim_returns_false(self, aws_resources):
-        """At-least-once delivery guard: second claim on same event is rejected."""
+        """At-least-once delivery guard: second claim on the same event is rejected."""
         from app.services.processor import transition_to_processing
 
         event_id = str(uuid.uuid4())
@@ -97,18 +96,28 @@ class TestMarkFailed:
         assert item["error"] == "something went wrong"
 
 
-# ── process_message ───────────────────────────────────────────────────────────
+# ── process_message (dispatch integration) ────────────────────────────────────
 
 class TestProcessMessage:
-    def test_happy_path_marks_completed(self, aws_resources, monkeypatch):
-        from app.services import processor
+    """
+    These tests verify that process_message correctly orchestrates:
+    fetch -> claim -> dispatch -> mark_completed/mark_failed.
+    Handler logic is not tested here (see test_handlers.py).
+    """
 
-        # Disable random failure and sleep for deterministic test
-        monkeypatch.setattr(processor.random, "random", lambda: 0.99)
-        monkeypatch.setattr(processor.time, "sleep", lambda _: None)
+    def test_ping_event_marks_completed(self, aws_resources):
+        """A 'ping' event should be dispatched to PingHandler and mark COMPLETED."""
+        from app.services import processor
 
         event_id = str(uuid.uuid4())
         _seed_event(aws_resources["events_table"], event_id, status="CREATED")
+        # Override event type to ping
+        aws_resources["events_table"].update_item(
+            Key={"pk": f"EVENT#{event_id}"},
+            UpdateExpression="SET #t = :t",
+            ExpressionAttributeNames={"#t": "type"},
+            ExpressionAttributeValues={":t": "ping"},
+        )
 
         processor.process_message(json.dumps({"event_id": event_id}))
 
@@ -116,36 +125,74 @@ class TestProcessMessage:
             Key={"pk": f"EVENT#{event_id}"}
         )["Item"]
         assert item["status"] == "COMPLETED"
+        assert item["result"]["pong"] is True
 
-    def test_already_claimed_event_is_skipped(self, aws_resources, monkeypatch):
+    def test_already_claimed_event_is_skipped(self, aws_resources):
         """If another worker already claimed the event, process_message exits early."""
         from app.services import processor
 
-        monkeypatch.setattr(processor.random, "random", lambda: 0.99)
-        monkeypatch.setattr(processor.time, "sleep", lambda _: None)
-
         event_id = str(uuid.uuid4())
-        # seed as PROCESSING (already claimed)
         _seed_event(aws_resources["events_table"], event_id, status="PROCESSING")
 
-        # should not raise
+        # Should not raise
         processor.process_message(json.dumps({"event_id": event_id}))
 
         item = aws_resources["events_table"].get_item(
             Key={"pk": f"EVENT#{event_id}"}
         )["Item"]
-        # status unchanged
-        assert item["status"] == "PROCESSING"
+        assert item["status"] == "PROCESSING"   # unchanged
 
-    def test_simulated_error_propagates(self, aws_resources, monkeypatch):
-        """RuntimeError from processing logic should propagate so SQS retries."""
+    def test_missing_event_id_is_skipped(self, aws_resources):
+        """If the event_id doesn't exist in DDB, the message is skipped cleanly."""
         from app.services import processor
 
-        monkeypatch.setattr(processor.random, "random", lambda: 0.0)   # always fail
-        monkeypatch.setattr(processor.time, "sleep", lambda _: None)
+        non_existent = str(uuid.uuid4())
+        # Should not raise
+        processor.process_message(json.dumps({"event_id": non_existent}))
+
+    def test_unknown_event_type_uses_fallback(self, aws_resources):
+        """An unregistered event type is handled by FallbackHandler, not a crash."""
+        from app.services import processor
 
         event_id = str(uuid.uuid4())
         _seed_event(aws_resources["events_table"], event_id, status="CREATED")
+        aws_resources["events_table"].update_item(
+            Key={"pk": f"EVENT#{event_id}"},
+            UpdateExpression="SET #t = :t",
+            ExpressionAttributeNames={"#t": "type"},
+            ExpressionAttributeValues={":t": "completely.unknown.type"},
+        )
 
-        with pytest.raises(RuntimeError, match="simulated processing error"):
+        processor.process_message(json.dumps({"event_id": event_id}))
+
+        item = aws_resources["events_table"].get_item(
+            Key={"pk": f"EVENT#{event_id}"}
+        )["Item"]
+        assert item["status"] == "COMPLETED"
+        assert item["result"]["handler"] == "FallbackHandler"
+
+    def test_handler_exception_marks_failed_and_reraises(self, aws_resources, monkeypatch):
+        """If dispatch raises, the event is marked FAILED and the exception propagates."""
+        from app.services import processor
+        from app.services.handlers.registry import registry
+
+        event_id = str(uuid.uuid4())
+        _seed_event(aws_resources["events_table"], event_id, status="CREATED")
+        aws_resources["events_table"].update_item(
+            Key={"pk": f"EVENT#{event_id}"},
+            UpdateExpression="SET #t = :t",
+            ExpressionAttributeNames={"#t": "type"},
+            ExpressionAttributeValues={":t": "ping"},
+        )
+
+        # Monkeypatch the registry's dispatch to raise
+        monkeypatch.setattr(registry, "dispatch", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("boom")))
+
+        with pytest.raises(RuntimeError, match="boom"):
             processor.process_message(json.dumps({"event_id": event_id}))
+
+        item = aws_resources["events_table"].get_item(
+            Key={"pk": f"EVENT#{event_id}"}
+        )["Item"]
+        assert item["status"] == "FAILED"
+        assert "boom" in item["error"]
