@@ -1,15 +1,31 @@
+"""
+Core message processor for the AtlasFlow worker.
+
+Flow for each SQS message:
+  1. Parse message body -> extract event_id
+  2. Fetch the full event record from DynamoDB (type + payload live there)
+  3. Transition status: CREATED -> PROCESSING (conditional, prevents double-claim)
+  4. Dispatch to the correct handler via the type registry
+  5. Write result + COMPLETED status back to DynamoDB
+  6. Any exception propagates to the caller (worker loop) so SQS retries
+
+Importing this module does NOT load handlers. Handlers are loaded lazily when
+process_message is first called, so tests can monkeypatch the registry before
+the import side-effects run.
+"""
 from __future__ import annotations
 
 import json
-import random
-import time
+import logging
 from datetime import datetime, timezone
-from typing import Any, Dict
+from typing import Any
 
 from botocore.exceptions import ClientError
 
 from app.core.config import settings
 from app.services.aws_clients import ddb_resource
+
+logger = logging.getLogger(__name__)
 
 
 def _now_iso() -> str:
@@ -23,10 +39,11 @@ def _events_table():
 def _pk(event_id: str) -> str:
     return f"EVENT#{event_id}"
 
+
 def transition_to_processing(event_id: str) -> bool:
     """
     Conditional update prevents double-processing under at-least-once delivery.
-    Returns True if we successfully claimed it, False if it was already finished.
+    Returns True if we successfully claimed it, False if it was already claimed.
     """
     table = _events_table()
     try:
@@ -49,7 +66,7 @@ def transition_to_processing(event_id: str) -> bool:
         raise
 
 
-def mark_completed(event_id: str, result: Dict[str, Any]) -> None:
+def mark_completed(event_id: str, result: dict[str, Any]) -> None:
     table = _events_table()
     table.update_item(
         Key={"pk": _pk(event_id)},
@@ -57,6 +74,7 @@ def mark_completed(event_id: str, result: Dict[str, Any]) -> None:
         ExpressionAttributeNames={"#s": "status", "#r": "result"},
         ExpressionAttributeValues={":c": "COMPLETED", ":u": _now_iso(), ":r": result},
     )
+
 
 def mark_failed(event_id: str, err: str) -> None:
     table = _events_table()
@@ -68,19 +86,43 @@ def mark_failed(event_id: str, err: str) -> None:
     )
 
 
+def _fetch_event(event_id: str) -> dict[str, Any] | None:
+    """Return the full DynamoDB item for event_id, or None if not found."""
+    resp = _events_table().get_item(Key={"pk": _pk(event_id)})
+    return resp.get("Item")
+
+
 def process_message(body: str) -> None:
-    payload = json.loads(body)
-    event_id = payload["event_id"]
+    """
+    Entry point called by the worker loop for each SQS message.
+
+    The message body only carries event_id. The event type and payload are
+    fetched from DynamoDB so the SQS message stays small regardless of
+    payload size.
+    """
+    # Lazy import keeps the module importable without side-effects in tests.
+    import app.services.handlers.builtin  # noqa: F401 — triggers @registry.register calls
+    from app.services.handlers.registry import registry
+
+    msg = json.loads(body)
+    event_id = msg["event_id"]
+
+    item = _fetch_event(event_id)
+    if item is None:
+        logger.error("process_message: event_id=%s not found in DynamoDB; skipping", event_id)
+        return
+
+    event_type: str = item.get("type", "")
+    payload: dict = item.get("payload_inline", {})
 
     claimed = transition_to_processing(event_id)
     if not claimed:
-        # Another worker already claimed it 
+        logger.info("process_message: event_id=%s already claimed; skipping", event_id)
         return
 
-    # Simulated work
-    time.sleep(0.2)
-    if random.random() < 0.02:
-        raise RuntimeError("simulated processing error")
-
-    result = {"summary": "processed", "event_id": event_id}
-    mark_completed(event_id, result)
+    try:
+        result = registry.dispatch(event_type, event_id, payload)
+        mark_completed(event_id, result)
+    except Exception as exc:
+        mark_failed(event_id, str(exc))
+        raise
