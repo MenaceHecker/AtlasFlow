@@ -4,7 +4,7 @@ Base handler interface for AtlasFlow event processing.
 Every handler must accept an event_id and a payload dict, perform its work,
 and return a result dict that will be written back to DynamoDB.
 
-Handlers should raise an exception if they cannot process the event — the
+Handlers should raise an exception if they cannot process the event, the
 worker will propagate that exception so SQS retries (and eventually the DLQ)
 take over.
 """

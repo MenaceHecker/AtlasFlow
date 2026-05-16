@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+# pyrefly: ignore [missing-import]
 from pydantic import BaseModel, Field, model_validator
-from typing import Any, Literal
+from typing import Any, Dict, List, Optional, Literal
 
 
 EventStatus = Literal["CREATED", "PROCESSING", "COMPLETED", "FAILED"]
@@ -9,7 +10,7 @@ EventStatus = Literal["CREATED", "PROCESSING", "COMPLETED", "FAILED"]
 
 class EventIn(BaseModel):
     type: str = Field(..., min_length=1, max_length=64)
-    payload: dict[str, Any] = Field(default_factory=dict)
+    payload: Dict[str, Any] = Field(default_factory=dict)
 
 
 class EventOut(BaseModel):
@@ -29,9 +30,9 @@ class EventDetail(BaseModel):
     created_at: str
     updated_at: str
     attempts: int = 0
-    payload: dict[str, Any] | None = None
-    result: dict[str, Any] | None = None
-    error: str | None = None
+    payload: Optional[Dict[str, Any]] = None
+    result: Optional[Dict[str, Any]] = None
+    error: Optional[str] = None
 
     @model_validator(mode="before")
     @classmethod
@@ -59,5 +60,5 @@ class EventDetail(BaseModel):
 
 class EventListResponse(BaseModel):
     """Returned by GET /v1/events."""
-    items: list[EventDetail]
-    next_token: str | None = None
+    items: List[EventDetail]
+    next_token: Optional[str] = None
