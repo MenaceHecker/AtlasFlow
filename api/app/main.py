@@ -6,7 +6,7 @@ app = FastAPI(title="AtlasFlow API", version="0.1.0")
 
 app.include_router(events_router)
 app.include_router(admin_router)
-
+## Health check endpoint
 
 @app.get("/health")
 def health():
