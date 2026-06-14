@@ -50,7 +50,14 @@ This starts the LocalStack container and waits until it is healthy before return
 make infra
 ```
 
-This runs `terraform apply` against LocalStack and creates the S3 bucket, SQS queue, dead-letter queue, and DynamoDB tables.
+This runs `terraform apply` against LocalStack and creates the S3 bucket, SQS queue, dead-letter queue, events table, idempotency table, status index, and idempotency TTL configuration.
+
+If you used an older checkout where `scripts/create_ddb.sh` created the tables, import them once before running `make infra`:
+
+```bash
+terraform -chdir=infra import aws_dynamodb_table.events atlasflow-events
+terraform -chdir=infra import aws_dynamodb_table.idempotency atlasflow-idempotency
+```
 
 **4. Start the API and worker**
 

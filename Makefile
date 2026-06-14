@@ -19,7 +19,7 @@ export AWS_REGION
 export AWS_DEFAULT_REGION=$(AWS_REGION)
 export LOCALSTACK_ENDPOINT
 
-.PHONY: up down logs infra infra-destroy fmt validate smoke clean help test test-api test-worker
+.PHONY: up down logs infra infra-destroy fmt validate smoke clean help test test-api test-worker api-logs api-shell worker-logs
 
 help:
 	@echo "Targets:"
@@ -50,25 +50,20 @@ logs:
 	docker compose logs -f localstack
 
 fmt:
-	cd infra && terraform fmt -recursive
+	terraform -chdir=infra fmt -recursive
 
 validate:
-	cd infra && terraform init -upgrade >/dev/null && terraform validate
+	terraform -chdir=infra init -upgrade >/dev/null
+	terraform -chdir=infra validate
 
 infra:
-	cd infra && terraform init -upgrade
-	cd infra && terraform apply -auto-approve
+	terraform -chdir=infra init -upgrade
+	terraform -chdir=infra apply -auto-approve
 
 infra-destroy:
-	cd infra && terraform destroy -auto-approve
+	terraform -chdir=infra destroy -auto-approve
 
-smoke:
-	bash scripts/smoke.sh
-
-ddb:
-	bash scripts/create_ddb.sh
-
-smoke: infra ddb
+smoke: infra
 	bash scripts/smoke.sh
 
 clean: down infra-destroy
@@ -78,9 +73,6 @@ api-logs:
 
 api-shell:
 	docker compose exec api /bin/bash
-
-fmt:
-	terraform -chdir=infra fmt -recursive
 
 worker-logs:
 	docker compose logs -f worker

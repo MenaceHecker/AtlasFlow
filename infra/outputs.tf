@@ -10,3 +10,10 @@ output "sqs_dlq_url" {
   value = aws_sqs_queue.dlq.url
 }
 
+output "dynamodb_events_table" {
+  value = aws_dynamodb_table.events.name
+}
+
+output "dynamodb_idempotency_table" {
+  value = aws_dynamodb_table.idempotency.name
+}
