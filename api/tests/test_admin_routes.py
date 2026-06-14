@@ -99,14 +99,28 @@ class TestAdminAuth:
 # ── DLQ replay logic ──────────────────────────────────────────────────────────
 
 class TestDlqReplay:
-    def _seed_dlq(self, aws_resources, n: int = 2):
-        """Push n messages directly onto the DLQ."""
+    def _seed_dlq(self, aws_resources, n: int = 2, status: str = "FAILED"):
+        """Push n messages onto the DLQ with matching event records."""
         sqs = aws_resources["sqs"]
         dlq_url = aws_resources["dlq_url"]
         for i in range(n):
+            event_id = f"evt-{i}"
+            aws_resources["events_table"].put_item(
+                Item={
+                    "pk": f"EVENT#{event_id}",
+                    "event_id": event_id,
+                    "type": "test.event",
+                    "status": status,
+                    "created_at": "2026-01-01T00:00:00+00:00",
+                    "updated_at": "2026-01-01T00:00:00+00:00",
+                    "attempts": 5,
+                    "payload_inline": {},
+                    "error": "handler failed",
+                }
+            )
             sqs.send_message(
                 QueueUrl=dlq_url,
-                MessageBody=json.dumps({"event_id": f"evt-{i}"}),
+                MessageBody=json.dumps({"event_id": event_id}),
             )
 
     def test_replay_moves_messages_to_main_queue(self, api_client_with_key, aws_resources):
@@ -119,6 +133,7 @@ class TestDlqReplay:
         assert resp.status_code == 200
         body = resp.json()
         assert body["replayed"] == 2
+        assert body["skipped"] == 0
 
         # Verify messages landed on the main queue
         sqs = aws_resources["sqs"]
@@ -129,6 +144,13 @@ class TestDlqReplay:
         ).get("Messages", [])
         assert len(received) == 2
 
+        for i in range(2):
+            item = aws_resources["events_table"].get_item(
+                Key={"pk": f"EVENT#evt-{i}"}
+            )["Item"]
+            assert item["status"] == "CREATED"
+            assert item["attempts"] == 5
+
     def test_replay_empty_dlq_returns_zero(self, api_client_with_key, aws_resources):
         resp = api_client_with_key.post(
             "/v1/admin/dlq/replay",
@@ -136,6 +158,7 @@ class TestDlqReplay:
         )
         assert resp.status_code == 200
         assert resp.json()["replayed"] == 0
+        assert resp.json()["skipped"] == 0
 
     def test_replay_respects_max_messages_param(self, api_client_with_key, aws_resources):
         self._seed_dlq(aws_resources, n=5)
@@ -146,3 +169,64 @@ class TestDlqReplay:
         )
         assert resp.status_code == 200
         assert resp.json()["replayed"] <= 2
+
+    def test_replay_skips_event_that_is_not_failed(
+        self, api_client_with_key, aws_resources
+    ):
+        self._seed_dlq(aws_resources, n=1, status="COMPLETED")
+
+        resp = api_client_with_key.post(
+            "/v1/admin/dlq/replay",
+            headers={"X-Admin-Key": VALID_KEY},
+        )
+
+        assert resp.status_code == 200
+        assert resp.json()["replayed"] == 0
+        assert resp.json()["skipped"] == 1
+
+        item = aws_resources["events_table"].get_item(
+            Key={"pk": "EVENT#evt-0"}
+        )["Item"]
+        assert item["status"] == "COMPLETED"
+
+    def test_replay_skips_message_without_matching_event(
+        self, api_client_with_key, aws_resources
+    ):
+        aws_resources["sqs"].send_message(
+            QueueUrl=aws_resources["dlq_url"],
+            MessageBody=json.dumps({"event_id": "missing-event"}),
+        )
+
+        resp = api_client_with_key.post(
+            "/v1/admin/dlq/replay",
+            headers={"X-Admin-Key": VALID_KEY},
+        )
+
+        assert resp.status_code == 200
+        assert resp.json()["replayed"] == 0
+        assert resp.json()["skipped"] == 1
+
+    def test_replay_restores_failed_status_when_enqueue_fails(
+        self, api_client_with_key, aws_resources, monkeypatch
+    ):
+        self._seed_dlq(aws_resources, n=1)
+
+        import app.routes.admin as admin_mod
+
+        monkeypatch.setattr(admin_mod, "sqs_client", lambda: aws_resources["sqs"])
+
+        def fail_send_message(**kwargs):
+            raise RuntimeError("SQS unavailable")
+
+        monkeypatch.setattr(aws_resources["sqs"], "send_message", fail_send_message)
+
+        with pytest.raises(RuntimeError, match="SQS unavailable"):
+            api_client_with_key.post(
+                "/v1/admin/dlq/replay",
+                headers={"X-Admin-Key": VALID_KEY},
+            )
+
+        item = aws_resources["events_table"].get_item(
+            Key={"pk": "EVENT#evt-0"}
+        )["Item"]
+        assert item["status"] == "FAILED"
