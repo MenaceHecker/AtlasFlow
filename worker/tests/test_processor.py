@@ -49,14 +49,20 @@ class TestTransitionToProcessing:
         claimed = transition_to_processing(event_id)
         assert claimed is False
 
-    def test_cannot_claim_failed_event(self, aws_resources):
+    def test_claims_failed_event_for_retry(self, aws_resources):
         from app.services.processor import transition_to_processing
 
         event_id = str(uuid.uuid4())
         _seed_event(aws_resources["events_table"], event_id, status="FAILED")
 
         claimed = transition_to_processing(event_id)
-        assert claimed is False
+        assert claimed is True
+
+        item = aws_resources["events_table"].get_item(
+            Key={"pk": f"EVENT#{event_id}"}
+        )["Item"]
+        assert item["status"] == "PROCESSING"
+        assert item["attempts"] == 1
 
 
 # ── mark_completed ────────────────────────────────────────────────────────────
@@ -196,3 +202,47 @@ class TestProcessMessage:
         )["Item"]
         assert item["status"] == "FAILED"
         assert "boom" in item["error"]
+
+    def test_failed_event_is_retried_and_completed(self, aws_resources, monkeypatch):
+        """A redelivered message can reclaim a FAILED event and complete it."""
+        from app.services import processor
+        from app.services.handlers.registry import registry
+
+        event_id = str(uuid.uuid4())
+        _seed_event(aws_resources["events_table"], event_id, status="CREATED")
+        aws_resources["events_table"].update_item(
+            Key={"pk": f"EVENT#{event_id}"},
+            UpdateExpression="SET #t = :t",
+            ExpressionAttributeNames={"#t": "type"},
+            ExpressionAttributeValues={":t": "retry.test"},
+        )
+
+        calls = 0
+
+        def fail_once_then_succeed(*args, **kwargs):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                raise RuntimeError("transient failure")
+            return {"retried": True}
+
+        monkeypatch.setattr(registry, "dispatch", fail_once_then_succeed)
+
+        with pytest.raises(RuntimeError, match="transient failure"):
+            processor.process_message(json.dumps({"event_id": event_id}))
+
+        failed_item = aws_resources["events_table"].get_item(
+            Key={"pk": f"EVENT#{event_id}"}
+        )["Item"]
+        assert failed_item["status"] == "FAILED"
+        assert failed_item["attempts"] == 1
+
+        processor.process_message(json.dumps({"event_id": event_id}))
+
+        completed_item = aws_resources["events_table"].get_item(
+            Key={"pk": f"EVENT#{event_id}"}
+        )["Item"]
+        assert completed_item["status"] == "COMPLETED"
+        assert completed_item["attempts"] == 2
+        assert completed_item["result"] == {"retried": True}
+        assert "error" not in completed_item
