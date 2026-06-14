@@ -73,6 +73,64 @@ class TestCreateEvent:
 
         assert id1 != id2
 
+    def test_enqueue_failure_removes_event(self, aws_resources, monkeypatch):
+        from app.services import events_service
+
+        monkeypatch.setattr(
+            events_service, "_get_queue_url", lambda: aws_resources["queue_url"]
+        )
+        monkeypatch.setattr(
+            events_service, "sqs_client", lambda: aws_resources["sqs"]
+        )
+        monkeypatch.setattr(
+            aws_resources["sqs"],
+            "send_message",
+            lambda **kwargs: (_ for _ in ()).throw(RuntimeError("SQS unavailable")),
+        )
+
+        with pytest.raises(RuntimeError, match="SQS unavailable"):
+            events_service.create_event("order.placed", {}, None)
+
+        items = aws_resources["events_table"].scan().get("Items", [])
+        assert items == []
+
+    def test_enqueue_failure_releases_idempotency_key(
+        self, aws_resources, monkeypatch
+    ):
+        from app.services import events_service
+
+        original_send_message = aws_resources["sqs"].send_message
+        calls = 0
+
+        def fail_once(**kwargs):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                raise RuntimeError("SQS unavailable")
+            return original_send_message(**kwargs)
+
+        monkeypatch.setattr(
+            events_service, "_get_queue_url", lambda: aws_resources["queue_url"]
+        )
+        monkeypatch.setattr(
+            events_service, "sqs_client", lambda: aws_resources["sqs"]
+        )
+        monkeypatch.setattr(aws_resources["sqs"], "send_message", fail_once)
+
+        key = "retryable-idempotency-key"
+        with pytest.raises(RuntimeError, match="SQS unavailable"):
+            events_service.create_event("order.placed", {}, key)
+
+        assert aws_resources["events_table"].scan().get("Items", []) == []
+        assert aws_resources["idem_table"].get_item(
+            Key={"pk": f"IDEMP#{key}"}
+        ).get("Item") is None
+
+        event_id, reused = events_service.create_event("order.placed", {}, key)
+
+        assert reused is False
+        assert events_service.get_event(event_id) is not None
+
 
 # ── get_event ─────────────────────────────────────────────────────────────────
 

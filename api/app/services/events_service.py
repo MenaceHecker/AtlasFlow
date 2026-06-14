@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 import uuid
 from datetime import datetime, timezone
@@ -11,6 +12,8 @@ from botocore.exceptions import ClientError
 
 from app.core.config import settings
 from app.services.aws_clients import ddb_resource, sqs_client
+
+logger = logging.getLogger(__name__)
 
 
 def _now_iso() -> str:
@@ -64,7 +67,21 @@ def create_event(event_type: str, payload: Dict[str, Any], idempotency_key: Opti
             },
             ConditionExpression="attribute_not_exists(pk)",
         )
-        _persist_and_enqueue(new_event_id, event_type, payload, now)
+        try:
+            _persist_and_enqueue(new_event_id, event_type, payload, now)
+        except Exception:
+            try:
+                idem.delete_item(
+                    Key={"pk": idem_pk},
+                    ConditionExpression="event_id = :event_id",
+                    ExpressionAttributeValues={":event_id": new_event_id},
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to release idempotency key after enqueue failure: %s",
+                    idem_pk,
+                )
+            raise
         return new_event_id, False
 
     except ClientError as e:
@@ -99,14 +116,24 @@ def _persist_and_enqueue(event_id: str, event_type: str, payload: Dict[str, Any]
 
     events.put_item(Item=item)
 
-    queue_url = _get_queue_url()
-    sqs.send_message(
-        QueueUrl=queue_url,
-        MessageBody=json.dumps({"event_id": event_id}),
-        MessageAttributes={
-            "event_type": {"StringValue": event_type, "DataType": "String"},
-        },
-    )
+    try:
+        queue_url = _get_queue_url()
+        sqs.send_message(
+            QueueUrl=queue_url,
+            MessageBody=json.dumps({"event_id": event_id}),
+            MessageAttributes={
+                "event_type": {"StringValue": event_type, "DataType": "String"},
+            },
+        )
+    except Exception:
+        try:
+            events.delete_item(Key={"pk": pk})
+        except Exception:
+            logger.exception(
+                "Failed to remove event after enqueue failure: event_id=%s",
+                event_id,
+            )
+        raise
 
 
 def get_event(event_id: str) -> Optional[Dict[str, Any]]:
