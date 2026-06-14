@@ -104,6 +104,29 @@ class TestEventDetailShape:
             assert "status" in item
             assert "payload" in item
 
+    def test_legacy_worker_timestamp_overrides_stale_timestamp(
+        self, api_client, aws_resources
+    ):
+        event_id = "legacy-timestamp"
+        aws_resources["events_table"].put_item(
+            Item={
+                "pk": f"EVENT#{event_id}",
+                "event_id": event_id,
+                "type": "legacy.test",
+                "status": "COMPLETED",
+                "created_at": "2026-01-01T00:00:00+00:00",
+                "updated_at": "2026-01-01T00:00:00+00:00",
+                "updatedAt": "2026-01-02T00:00:00+00:00",
+                "attempts": 1,
+                "payload_inline": {},
+            }
+        )
+
+        body = api_client.get(f"/v1/events/{event_id}").json()
+
+        assert body["updated_at"] == "2026-01-02T00:00:00+00:00"
+        assert "updatedAt" not in body
+
 
 # ── GET /v1/events ────────────────────────────────────────────────────────────
 

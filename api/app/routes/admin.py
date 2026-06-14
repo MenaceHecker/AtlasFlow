@@ -31,7 +31,7 @@ def _set_replay_status(event_id: str, from_status: str, to_status: str) -> bool:
     try:
         table.update_item(
             Key={"pk": f"EVENT#{event_id}"},
-            UpdateExpression="SET #s = :to, updatedAt = :updated",
+            UpdateExpression="SET #s = :to, updated_at = :updated",
             ConditionExpression="#s = :from",
             ExpressionAttributeNames={"#s": "status"},
             ExpressionAttributeValues={

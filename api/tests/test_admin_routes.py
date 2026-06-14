@@ -150,6 +150,8 @@ class TestDlqReplay:
             )["Item"]
             assert item["status"] == "CREATED"
             assert item["attempts"] == 5
+            assert item["updated_at"] != "2026-01-01T00:00:00+00:00"
+            assert "updatedAt" not in item
 
     def test_replay_empty_dlq_returns_zero(self, api_client_with_key, aws_resources):
         resp = api_client_with_key.post(

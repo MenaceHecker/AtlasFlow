@@ -26,6 +26,8 @@ class TestTransitionToProcessing:
             Key={"pk": f"EVENT#{event_id}"}
         )["Item"]
         assert item["status"] == "PROCESSING"
+        assert item["updated_at"] != item["created_at"]
+        assert "updatedAt" not in item
 
     def test_double_claim_returns_false(self, aws_resources):
         """At-least-once delivery guard: second claim on the same event is rejected."""
@@ -82,6 +84,8 @@ class TestMarkCompleted:
         )["Item"]
         assert item["status"] == "COMPLETED"
         assert item["result"] == result
+        assert item["updated_at"] != item["created_at"]
+        assert "updatedAt" not in item
 
 
 # ── mark_failed ───────────────────────────────────────────────────────────────
@@ -100,6 +104,8 @@ class TestMarkFailed:
         )["Item"]
         assert item["status"] == "FAILED"
         assert item["error"] == "something went wrong"
+        assert item["updated_at"] != item["created_at"]
+        assert "updatedAt" not in item
 
 
 # ── process_message (dispatch integration) ────────────────────────────────────

@@ -38,9 +38,9 @@ class EventDetail(BaseModel):
     @classmethod
     def _remap_ddb_item(cls, data: Any) -> Any:
         """
-        DynamoDB stores the payload as 'payload_inline' and timestamps
-        under 'updated_at' / 'updatedAt' depending on which code path wrote
-        the record. Normalise everything before Pydantic validates.
+        DynamoDB stores the payload as 'payload_inline'. Older records may
+        contain the legacy 'updatedAt' timestamp, so normalise those records
+        before Pydantic validates them.
         """
         if not isinstance(data, dict):
             return data
@@ -51,8 +51,8 @@ class EventDetail(BaseModel):
         if "payload_inline" in out and "payload" not in out:
             out["payload"] = out.pop("payload_inline")
 
-        # updatedAt (camelCase from worker) -> updated_at
-        if "updatedAt" in out and "updated_at" not in out:
+        # Legacy worker writes may have both fields; updatedAt is the later value.
+        if "updatedAt" in out:
             out["updated_at"] = out.pop("updatedAt")
 
         return out

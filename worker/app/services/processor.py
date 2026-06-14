@@ -51,7 +51,7 @@ def transition_to_processing(event_id: str) -> bool:
     try:
         table.update_item(
             Key={"pk": _pk(event_id)},
-            UpdateExpression="SET #s = :p, updatedAt = :u ADD attempts :one",
+            UpdateExpression="SET #s = :p, updated_at = :u ADD attempts :one",
             ConditionExpression="#s IN (:created, :failed)",
             ExpressionAttributeNames={"#s": "status"},
             ExpressionAttributeValues={
@@ -73,7 +73,7 @@ def mark_completed(event_id: str, result: dict[str, Any]) -> None:
     table = _events_table()
     table.update_item(
         Key={"pk": _pk(event_id)},
-        UpdateExpression="SET #s = :c, updatedAt = :u, #r = :r REMOVE #e",
+        UpdateExpression="SET #s = :c, updated_at = :u, #r = :r REMOVE #e",
         ExpressionAttributeNames={"#s": "status", "#r": "result", "#e": "error"},
         ExpressionAttributeValues={":c": "COMPLETED", ":u": _now_iso(), ":r": result},
     )
@@ -83,7 +83,7 @@ def mark_failed(event_id: str, err: str) -> None:
     table = _events_table()
     table.update_item(
         Key={"pk": _pk(event_id)},
-        UpdateExpression="SET #s = :f, updatedAt = :u, #e = :e",
+        UpdateExpression="SET #s = :f, updated_at = :u, #e = :e",
         ExpressionAttributeNames={"#s": "status", "#e": "error"},
         ExpressionAttributeValues={":f": "FAILED", ":u": _now_iso(), ":e": err},
     )
