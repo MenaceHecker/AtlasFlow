@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from datetime import datetime, timezone
 from typing import Any
 
@@ -109,6 +110,7 @@ def process_message(body: str) -> None:
 
     msg = json.loads(body)
     event_id = msg["event_id"]
+    t_start = time.perf_counter()
 
     item = _fetch_event(event_id)
     if item is None:
@@ -134,12 +136,21 @@ def process_message(body: str) -> None:
         mark_completed(event_id, result)
         logger.info(
             "Event completed",
-            extra={"event_id": event_id, "event_type": event_type},
+            extra={
+                "event_id": event_id,
+                "event_type": event_type,
+                "total_duration_ms": round((time.perf_counter() - t_start) * 1000, 2),
+            },
         )
     except Exception as exc:
         mark_failed(event_id, str(exc))
         logger.error(
             "Event failed",
-            extra={"event_id": event_id, "event_type": event_type, "error": str(exc)},
+            extra={
+                "event_id": event_id,
+                "event_type": event_type,
+                "error": str(exc),
+                "total_duration_ms": round((time.perf_counter() - t_start) * 1000, 2),
+            },
         )
         raise

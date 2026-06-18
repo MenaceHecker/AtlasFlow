@@ -18,6 +18,7 @@ Usage — dispatching (done automatically by processor.py):
 from __future__ import annotations
 
 import logging
+import time
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -62,12 +63,26 @@ class HandlerRegistry:
         handler_cls = self._handlers.get(event_type, FallbackHandler)
         handler = handler_cls()
         logger.info(
-            "Dispatching event_id=%s event_type=%r to %s",
-            event_id,
-            event_type,
-            handler_cls.__name__,
+            "Dispatching event to handler",
+            extra={
+                "event_id": event_id,
+                "event_type": event_type,
+                "handler": handler_cls.__name__,
+            },
         )
-        return handler.handle(event_id, payload)
+        t0 = time.perf_counter()
+        result = handler.handle(event_id, payload)
+        duration_ms = round((time.perf_counter() - t0) * 1000, 2)
+        logger.info(
+            "Handler finished",
+            extra={
+                "event_id": event_id,
+                "event_type": event_type,
+                "handler": handler_cls.__name__,
+                "duration_ms": duration_ms,
+            },
+        )
+        return result
 
     @property
     def registered_types(self) -> list[str]:
