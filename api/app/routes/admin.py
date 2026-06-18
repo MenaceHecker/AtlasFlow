@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
-from fastapi import APIRouter, Depends
-from typing import Dict, Any
+from datetime import UTC, datetime
+from typing import Any
 
 from botocore.exceptions import ClientError
+from fastapi import APIRouter, Depends
 
-from app.core.dependencies import require_admin_key
 from app.core.config import settings
+from app.core.dependencies import require_admin_key
 from app.services.aws_clients import ddb_resource, sqs_client
 
 router = APIRouter(
@@ -37,7 +37,7 @@ def _set_replay_status(event_id: str, from_status: str, to_status: str) -> bool:
             ExpressionAttributeValues={
                 ":from": from_status,
                 ":to": to_status,
-                ":updated": datetime.now(timezone.utc).isoformat(),
+                ":updated": datetime.now(UTC).isoformat(),
             },
         )
         return True
@@ -48,7 +48,7 @@ def _set_replay_status(event_id: str, from_status: str, to_status: str) -> bool:
 
 
 @router.post("/dlq/replay")
-def replay_dlq(max_messages: int = 10) -> Dict[str, Any]:
+def replay_dlq(max_messages: int = 10) -> dict[str, Any]:
     sqs = sqs_client()
 
     dlq_url = _queue_url(DLQ_NAME)

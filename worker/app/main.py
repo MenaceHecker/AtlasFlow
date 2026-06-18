@@ -7,8 +7,6 @@ configure_logging()  # must be first — sets up JSON formatter before any other
 import logging  # noqa: E402
 import time  # noqa: E402
 
-from botocore.exceptions import ClientError  # noqa: E402
-
 from app.core.config import settings  # noqa: E402
 from app.services.aws_clients import sqs_client  # noqa: E402
 from app.services.processor import process_message  # noqa: E402

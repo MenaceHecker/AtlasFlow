@@ -4,9 +4,9 @@ import json
 import logging
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from functools import lru_cache
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 from botocore.exceptions import ClientError
 
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _ttl_epoch_seconds(minutes: int = 60) -> int:
@@ -39,7 +39,9 @@ def _get_queue_url() -> str:
     return resp["QueueUrl"]
 
 
-def create_event(event_type: str, payload: Dict[str, Any], idempotency_key: Optional[str]) -> Tuple[str, bool]:
+def create_event(
+    event_type: str, payload: dict[str, Any], idempotency_key: str | None
+) -> tuple[str, bool]:
     """
     Returns: (event_id, reused)
     If reused == True if idempotency key already existed and we returned existing event_id.
@@ -74,7 +76,11 @@ def create_event(event_type: str, payload: Dict[str, Any], idempotency_key: Opti
         try:
             logger.info(
                 "Creating event with idempotency key",
-                extra={"event_id": new_event_id, "event_type": event_type, "idempotency_key": idempotency_key},
+                extra={
+                    "event_id": new_event_id,
+                    "event_type": event_type,
+                    "idempotency_key": idempotency_key,
+                },
             )
             _persist_and_enqueue(new_event_id, event_type, payload, now)
         except Exception:
@@ -115,7 +121,9 @@ def create_event(event_type: str, payload: Dict[str, Any], idempotency_key: Opti
         return existing_id, True
 
 
-def _persist_and_enqueue(event_id: str, event_type: str, payload: Dict[str, Any], now_iso: str) -> None:
+def _persist_and_enqueue(
+    event_id: str, event_type: str, payload: dict[str, Any], now_iso: str
+) -> None:
     events = _events_table()
     sqs = sqs_client()
 
@@ -153,14 +161,14 @@ def _persist_and_enqueue(event_id: str, event_type: str, payload: Dict[str, Any]
         raise
 
 
-def get_event(event_id: str) -> Optional[Dict[str, Any]]:
+def get_event(event_id: str) -> dict[str, Any] | None:
     events = _events_table()
     pk = f"EVENT#{event_id}"
     resp = events.get_item(Key={"pk": pk})
     return resp.get("Item")
 
 
-def list_events(status: Optional[str], limit: int, last_pk: Optional[str]) -> Dict[str, Any]:
+def list_events(status: str | None, limit: int, last_pk: str | None) -> dict[str, Any]:
     """
     Simple listing:
     - If status provided: query GSI by status (best-effort, LocalStack supports it)
@@ -170,7 +178,7 @@ def list_events(status: Optional[str], limit: int, last_pk: Optional[str]) -> Di
     events = _events_table()
 
     if status:
-        kwargs: Dict[str, Any] = {
+        kwargs: dict[str, Any] = {
             "IndexName": "gsi_status",
             "KeyConditionExpression": "#s = :v",
             "ExpressionAttributeNames": {"#s": "status"},
@@ -186,7 +194,7 @@ def list_events(status: Optional[str], limit: int, last_pk: Optional[str]) -> Di
 
         resp = events.query(**kwargs)
     else:
-        kwargs2: Dict[str, Any] = {"Limit": limit}
+        kwargs2: dict[str, Any] = {"Limit": limit}
         if last_pk:
             kwargs2["ExclusiveStartKey"] = {"pk": last_pk}
         resp = events.scan(**kwargs2)

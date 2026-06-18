@@ -1,12 +1,19 @@
+"""AtlasFlow API — FastAPI application entrypoint."""
+from __future__ import annotations
+
+# configure_logging() MUST be called before any other import that touches
+# the logging module. The E402 noqa comments below acknowledge that the
+# remaining imports intentionally come after this call.
 from app.core.logging_config import configure_logging
 
-configure_logging()  # must run before any other import that touches logging
+configure_logging()
 
 import logging  # noqa: E402
 
-from fastapi import FastAPI
-from app.routes.events import router as events_router
-from app.routes.admin import router as admin_router
+from fastapi import FastAPI  # noqa: E402
+
+from app.routes.admin import router as admin_router  # noqa: E402
+from app.routes.events import router as events_router  # noqa: E402
 
 logger = logging.getLogger(__name__)
 

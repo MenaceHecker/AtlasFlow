@@ -9,7 +9,7 @@ Usage:
 """
 from __future__ import annotations
 
-from fastapi import Depends, HTTPException, Security, status
+from fastapi import HTTPException, Security, status
 from fastapi.security import APIKeyHeader
 
 from app.core.config import settings

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-import boto3
 from functools import lru_cache
+
+import boto3
 from botocore.config import Config
+
 from app.core.config import settings
 
 
