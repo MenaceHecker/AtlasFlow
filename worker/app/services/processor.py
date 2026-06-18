@@ -112,7 +112,10 @@ def process_message(body: str) -> None:
 
     item = _fetch_event(event_id)
     if item is None:
-        logger.error("process_message: event_id=%s not found in DynamoDB; skipping", event_id)
+        logger.error(
+            "Event not found in DynamoDB; skipping message",
+            extra={"event_id": event_id},
+        )
         return
 
     event_type: str = item.get("type", "")
@@ -120,12 +123,23 @@ def process_message(body: str) -> None:
 
     claimed = transition_to_processing(event_id)
     if not claimed:
-        logger.info("process_message: event_id=%s already claimed; skipping", event_id)
+        logger.info(
+            "Event already claimed by another worker; skipping",
+            extra={"event_id": event_id, "event_type": event_type},
+        )
         return
 
     try:
         result = registry.dispatch(event_type, event_id, payload)
         mark_completed(event_id, result)
+        logger.info(
+            "Event completed",
+            extra={"event_id": event_id, "event_type": event_type},
+        )
     except Exception as exc:
         mark_failed(event_id, str(exc))
+        logger.error(
+            "Event failed",
+            extra={"event_id": event_id, "event_type": event_type, "error": str(exc)},
+        )
         raise
