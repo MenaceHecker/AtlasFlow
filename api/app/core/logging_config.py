@@ -20,7 +20,7 @@ import logging
 import os
 import sys
 
-from pythonjsonlogger import jsonlogger
+from pythonjsonlogger.json import JsonFormatter
 
 
 def configure_logging() -> None:
@@ -33,7 +33,7 @@ def configure_logging() -> None:
     handler = logging.StreamHandler(sys.stdout)
 
     if log_format == "json":
-        formatter = jsonlogger.JsonFormatter(
+        formatter = JsonFormatter(
             fmt="%(asctime)s %(levelname)s %(name)s %(message)s",
             datefmt="%Y-%m-%dT%H:%M:%S",
             rename_fields={"asctime": "timestamp", "levelname": "level", "name": "logger"},

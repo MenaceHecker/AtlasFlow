@@ -49,6 +49,10 @@ def create_event(event_type: str, payload: Dict[str, Any], idempotency_key: Opti
     # If no idempotency key, then attempt to create a new event
     if not idempotency_key:
         event_id = str(uuid.uuid4())
+        logger.info(
+            "Creating event",
+            extra={"event_id": event_id, "event_type": event_type},
+        )
         _persist_and_enqueue(event_id, event_type, payload, now)
         return event_id, False
 
@@ -68,6 +72,10 @@ def create_event(event_type: str, payload: Dict[str, Any], idempotency_key: Opti
             ConditionExpression="attribute_not_exists(pk)",
         )
         try:
+            logger.info(
+                "Creating event with idempotency key",
+                extra={"event_id": new_event_id, "event_type": event_type, "idempotency_key": idempotency_key},
+            )
             _persist_and_enqueue(new_event_id, event_type, payload, now)
         except Exception:
             try:
@@ -78,8 +86,8 @@ def create_event(event_type: str, payload: Dict[str, Any], idempotency_key: Opti
                 )
             except Exception:
                 logger.exception(
-                    "Failed to release idempotency key after enqueue failure: %s",
-                    idem_pk,
+                    "Failed to release idempotency key after enqueue failure",
+                    extra={"event_id": new_event_id, "idempotency_key": idempotency_key},
                 )
             raise
         return new_event_id, False
@@ -91,11 +99,20 @@ def create_event(event_type: str, payload: Dict[str, Any], idempotency_key: Opti
         # If key exists, return original eventId
         existing = idem.get_item(Key={"pk": idem_pk}).get("Item")
         if not existing or "event_id" not in existing:
-            # Edge case can be existed but missing eventId so treating as new
+            # Edge case: key existed but event_id missing — treat as new
+            logger.warning(
+                "Idempotency key exists but event_id missing; creating new event",
+                extra={"idempotency_key": idempotency_key, "event_type": event_type},
+            )
             _persist_and_enqueue(new_event_id, event_type, payload, now)
             return new_event_id, False
 
-        return existing["event_id"], True
+        existing_id = existing["event_id"]
+        logger.info(
+            "Idempotency key already used; returning existing event",
+            extra={"event_id": existing_id, "idempotency_key": idempotency_key},
+        )
+        return existing_id, True
 
 
 def _persist_and_enqueue(event_id: str, event_type: str, payload: Dict[str, Any], now_iso: str) -> None:
@@ -130,8 +147,8 @@ def _persist_and_enqueue(event_id: str, event_type: str, payload: Dict[str, Any]
             events.delete_item(Key={"pk": pk})
         except Exception:
             logger.exception(
-                "Failed to remove event after enqueue failure: event_id=%s",
-                event_id,
+                "Failed to remove event after SQS enqueue failure",
+                extra={"event_id": event_id, "event_type": event_type},
             )
         raise
 
