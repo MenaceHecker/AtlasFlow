@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
-from typing import Any
 
 from botocore.exceptions import ClientError
 from fastapi import APIRouter, Depends
 
 from app.core.config import settings
 from app.core.dependencies import require_admin_key
+from app.models.schemas import DlqReplayResponse
 from app.services.aws_clients import ddb_resource, sqs_client
 
 router = APIRouter(
@@ -47,8 +47,23 @@ def _set_replay_status(event_id: str, from_status: str, to_status: str) -> bool:
         raise
 
 
-@router.post("/dlq/replay")
-def replay_dlq(max_messages: int = 10) -> dict[str, Any]:
+@router.post(
+    "/dlq/replay",
+    response_model=DlqReplayResponse,
+    summary="Replay dead-letter queue messages",
+    description=(
+        "Reads up to `max_messages` messages from the DLQ and moves them back "
+        "to the main event queue for reprocessing. Each event's status is reset "
+        "from `FAILED` to `CREATED` atomically before re-enqueueing, so events "
+        "already being processed are skipped safely.\n\n"
+        "Requires the `X-Admin-Key` header."
+    ),
+    responses={
+        401: {"description": "Missing or invalid X-Admin-Key header"},
+        503: {"description": "Admin endpoints are disabled (ADMIN_API_KEY not set)"},
+    },
+)
+def replay_dlq(max_messages: int = 10) -> DlqReplayResponse:
     sqs = sqs_client()
 
     dlq_url = _queue_url(DLQ_NAME)
@@ -98,9 +113,9 @@ def replay_dlq(max_messages: int = 10) -> dict[str, Any]:
 
         replayed += 1
 
-    return {
-        "replayed": replayed,
-        "skipped": skipped,
-        "source_queue": DLQ_NAME,
-        "destination_queue": MAIN_QUEUE_NAME,
-    }
+    return DlqReplayResponse(
+        replayed=replayed,
+        skipped=skipped,
+        source_queue=DLQ_NAME,
+        destination_queue=MAIN_QUEUE_NAME,
+    )
