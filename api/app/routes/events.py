@@ -7,8 +7,10 @@ from app.services.events_service import create_event, get_event, list_events
 
 router = APIRouter(prefix="/v1/events", tags=["Events"])
 
-_404 = {404: {"description": "Event not found"}}
-_422 = {422: {"description": "Validation error — check your request body or query parameters"}}
+_404: dict[int | str, dict[str, str]] = {404: {"description": "Event not found"}}
+_422: dict[int | str, dict[str, str]] = {
+    422: {"description": "Validation error — check your request body or query parameters"}
+}
 
 
 @router.post(

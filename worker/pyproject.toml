@@ -30,4 +30,5 @@ select = ["E", "F", "I", "UP"]
 python_version = "3.11"
 strict = false
 ignore_missing_imports = true
+explicit_package_bases = true
 exclude = ["tests/"]

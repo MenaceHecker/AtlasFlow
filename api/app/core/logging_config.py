@@ -32,6 +32,7 @@ def configure_logging() -> None:
 
     handler = logging.StreamHandler(sys.stdout)
 
+    formatter: logging.Formatter
     if log_format == "json":
         formatter = JsonFormatter(
             fmt="%(asctime)s %(levelname)s %(name)s %(message)s",
