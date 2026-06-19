@@ -195,3 +195,31 @@ class TestListEvents:
 
         result = list_events(status="CREATED", limit=25, last_pk=None)
         assert all(i["status"] == "CREATED" for i in result["items"])
+
+    def test_next_token_is_opaque_base64(self, aws_resources):
+        """The cursor must not expose raw DynamoDB key values like 'EVENT#<uuid>'."""
+        import base64
+        import json
+        from app.services.events_service import create_event, list_events
+
+        for i in range(3):
+            create_event(f"type.cursor.{i}", {}, None)
+
+        result = list_events(status=None, limit=2, last_pk=None)
+        token = result["next_token"]
+
+        assert token is not None
+        # Must be valid base64 that decodes to JSON (not a raw pk string)
+        decoded = json.loads(base64.urlsafe_b64decode(token.encode()))
+        assert isinstance(decoded, dict)
+        assert "pk" in decoded
+        # The token itself must not look like a raw DynamoDB pk
+        assert not token.startswith("EVENT#")
+
+    def test_malformed_cursor_raises_value_error(self, aws_resources):
+        import pytest
+        from app.services.events_service import list_events
+
+        with pytest.raises(ValueError, match="Invalid pagination cursor"):
+            list_events(status=None, limit=10, last_pk="not-valid-base64!!!")
+

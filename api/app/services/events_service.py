@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import time
@@ -168,14 +169,40 @@ def get_event(event_id: str) -> dict[str, Any] | None:
     return resp.get("Item")
 
 
+def _encode_cursor(last_evaluated_key: dict[str, Any]) -> str:
+    """
+    Encode a DynamoDB LastEvaluatedKey into an opaque, URL-safe cursor string.
+
+    We JSON-serialize the full key dict (which may contain 'pk', 'status', or
+    other GSI attributes) and base64-encode it so callers never see raw DynamoDB
+    key values. This also makes it safe to change the underlying key schema
+    without a breaking API change.
+    """
+    return base64.urlsafe_b64encode(json.dumps(last_evaluated_key).encode()).decode()
+
+
+def _decode_cursor(cursor: str) -> dict[str, Any]:
+    """Reverse of _encode_cursor. Raises ValueError on malformed input."""
+    try:
+        return json.loads(base64.urlsafe_b64decode(cursor.encode()))
+    except Exception as exc:
+        raise ValueError(f"Invalid pagination cursor: {cursor!r}") from exc
+
+
 def list_events(status: str | None, limit: int, last_pk: str | None) -> dict[str, Any]:
     """
-    Simple listing:
-    - If status provided: query GSI by status (best-effort, LocalStack supports it)
-    - Else: scan with limit 
-    Pagination token is last evaluated key pk
+    List events with optional status filtering and cursor-based pagination.
+
+    - If status is provided, queries the gsi_status GSI.
+    - Otherwise, scans the full table.
+    - Pagination cursors are opaque base64 strings encoding the full
+      DynamoDB LastEvaluatedKey, so callers never see internal key values.
     """
     events = _events_table()
+
+    exclusive_start_key: dict[str, Any] | None = None
+    if last_pk:
+        exclusive_start_key = _decode_cursor(last_pk)
 
     if status:
         kwargs: dict[str, Any] = {
@@ -185,21 +212,16 @@ def list_events(status: str | None, limit: int, last_pk: str | None) -> dict[str
             "ExpressionAttributeValues": {":v": status},
             "Limit": limit,
         }
-        if last_pk:
-            # For GSI, LEK must match index keys as LocalStack can be picky
-            kwargs["ExclusiveStartKey"] = {
-                "status": status,
-                "pk": last_pk
-            }
-
+        if exclusive_start_key:
+            kwargs["ExclusiveStartKey"] = exclusive_start_key
         resp = events.query(**kwargs)
     else:
         kwargs2: dict[str, Any] = {"Limit": limit}
-        if last_pk:
-            kwargs2["ExclusiveStartKey"] = {"pk": last_pk}
+        if exclusive_start_key:
+            kwargs2["ExclusiveStartKey"] = exclusive_start_key
         resp = events.scan(**kwargs2)
 
     items = resp.get("Items", [])
-    lek = resp.get("LastEvaluatedKey", {})
-    next_token = lek.get("pk")
+    lek = resp.get("LastEvaluatedKey")
+    next_token = _encode_cursor(lek) if lek else None
     return {"items": items, "next_token": next_token}
