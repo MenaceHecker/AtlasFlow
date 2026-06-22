@@ -5,10 +5,10 @@ from __future__ import annotations
 
 import json
 import uuid
+
 import pytest
 
 from tests.conftest import _seed_event
-
 
 # ── transition_to_processing ──────────────────────────────────────────────────
 
@@ -198,7 +198,10 @@ class TestProcessMessage:
         )
 
         # Monkeypatch the registry's dispatch to raise
-        monkeypatch.setattr(registry, "dispatch", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("boom")))
+        def _raise(*a: object, **kw: object) -> None:
+            raise RuntimeError("boom")
+
+        monkeypatch.setattr(registry, "dispatch", _raise)
 
         with pytest.raises(RuntimeError, match="boom"):
             processor.process_message(json.dumps({"event_id": event_id}))

@@ -7,14 +7,13 @@ from __future__ import annotations
 import pytest
 
 from app.services.handlers.base import BaseHandler
-from app.services.handlers.registry import HandlerRegistry
 from app.services.handlers.builtin import (
-    PingHandler,
     DataTransformHandler,
-    NotifyHandler,
     FallbackHandler,
+    NotifyHandler,
+    PingHandler,
 )
-
+from app.services.handlers.registry import HandlerRegistry
 
 # ── PingHandler ───────────────────────────────────────────────────────────────
 

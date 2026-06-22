@@ -5,7 +5,7 @@ All AWS resources are mocked with moto.
 from __future__ import annotations
 
 import os
-import json
+from datetime import UTC
 
 import boto3
 import pytest
@@ -65,8 +65,8 @@ def aws_resources():
 
 def _seed_event(table, event_id: str, status: str = "CREATED") -> dict:
     """Helper: insert a bare event record directly into DDB."""
-    from datetime import datetime, timezone
-    now = datetime.now(timezone.utc).isoformat()
+    from datetime import datetime
+    now = datetime.now(UTC).isoformat()
     item = {
         "pk": f"EVENT#{event_id}",
         "event_id": event_id,
