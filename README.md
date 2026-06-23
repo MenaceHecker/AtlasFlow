@@ -4,7 +4,7 @@
 ![Python](https://img.shields.io/badge/python-3.11-blue)
 ![Terraform](https://img.shields.io/badge/terraform-1.6-purple)
 
-AtlasFlow is an event-driven backend built as a local-first monorepo. The whole stack runs on your machine with LocalStack and Terraform, so you don't need a real AWS account to develop or test against it.
+AtlasFlow is an event-driven backend built as a local-first monorepo. The whole stack runs on the machine with LocalStack and Terraform, so you don't need a real AWS account to develop or test against it.
 
 I built this to get hands-on with the patterns that show up in real event-driven systems: idempotent ingestion, at-least-once delivery, optimistic locking, dead-letter queues, and structured observability. Everything that would run on AWS in production runs locally here.
 
