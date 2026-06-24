@@ -30,6 +30,7 @@ EVENTS_TABLE = "atlasflow-events"
 IDEM_TABLE = "atlasflow-idempotency"
 QUEUE_NAME = "atlasflow-events"
 DLQ_NAME = "atlasflow-dlq"
+PAYLOAD_BUCKET = "atlasflow-payloads-test"
 
 
 @pytest.fixture(scope="function")
@@ -47,6 +48,10 @@ def aws_resources(aws_env):
     with mock_aws():
         ddb = boto3.resource("dynamodb", region_name=REGION)
         sqs = boto3.client("sqs", region_name=REGION)
+        s3 = boto3.client("s3", region_name=REGION)
+
+        # S3 payload bucket
+        s3.create_bucket(Bucket=PAYLOAD_BUCKET)
 
         # events table (pk = hash key, gsi on status)
         events_table = ddb.create_table(
@@ -92,10 +97,12 @@ def aws_resources(aws_env):
         yield {
             "ddb": ddb,
             "sqs": sqs,
+            "s3": s3,
             "events_table": events_table,
             "idem_table": idem_table,
             "queue_url": main_q["QueueUrl"],
             "dlq_url": dlq["QueueUrl"],
+            "payload_bucket": PAYLOAD_BUCKET,
         }
 
 
@@ -108,6 +115,7 @@ def api_client(aws_resources):
     from app.services import aws_clients
     aws_clients.ddb_resource.cache_clear()
     aws_clients.sqs_client.cache_clear()
+    aws_clients.s3_client.cache_clear()
 
     from app.services import events_service
     events_service._get_queue_url.cache_clear()
