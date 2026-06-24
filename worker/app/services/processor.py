@@ -4,10 +4,11 @@ Core message processor for the AtlasFlow worker.
 Flow for each SQS message:
   1. Parse message body -> extract event_id
   2. Fetch the full event record from DynamoDB (type + payload live there)
-  3. Transition status: CREATED -> PROCESSING (conditional, prevents double-claim)
-  4. Dispatch to the correct handler via the type registry
-  5. Write result + COMPLETED status back to DynamoDB
-  6. Any exception propagates to the caller (worker loop) so SQS retries
+  3. Resolve payload: if s3_key is present, fetch from S3; else use payload_inline
+  4. Transition status: CREATED -> PROCESSING (conditional, prevents double-claim)
+  5. Dispatch to the correct handler via the type registry
+  6. Write result + COMPLETED status back to DynamoDB
+  7. Any exception propagates to the caller (worker loop) so SQS retries
 
 Importing this module does NOT load handlers. Handlers are loaded lazily when
 process_message is first called, so tests can monkeypatch the registry before
@@ -24,7 +25,7 @@ from typing import Any
 from botocore.exceptions import ClientError
 
 from app.core.config import settings
-from app.services.aws_clients import ddb_resource
+from app.services.aws_clients import ddb_resource, s3_client
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +97,29 @@ def _fetch_event(event_id: str) -> dict[str, Any] | None:
     return resp.get("Item")
 
 
+def _resolve_payload(item: dict[str, Any]) -> dict[str, Any]:
+    """Return the event payload, fetching from S3 if the item uses payload offload.
+
+    Priority:
+        1. s3_key present  → download from S3 and deserialise.
+        2. payload_inline  → return directly (normal path).
+        3. Neither present → return empty dict (defensive fallback).
+    """
+    if "s3_key" in item:
+        s3_key = item["s3_key"]
+        if not settings.payload_bucket:
+            logger.error(
+                "Event has s3_key but PAYLOAD_BUCKET is not configured; "
+                "falling back to empty payload",
+                extra={"s3_key": s3_key},
+            )
+            return {}
+        response = s3_client().get_object(Bucket=settings.payload_bucket, Key=s3_key)
+        raw = response["Body"].read()
+        return json.loads(raw)
+    return item.get("payload_inline", {})
+
+
 def process_message(body: str) -> None:
     """
     Entry point called by the worker loop for each SQS message.
@@ -121,7 +145,7 @@ def process_message(body: str) -> None:
         return
 
     event_type: str = item.get("type", "")
-    payload: dict = item.get("payload_inline", {})
+    payload: dict = _resolve_payload(item)
 
     claimed = transition_to_processing(event_id)
     if not claimed:
