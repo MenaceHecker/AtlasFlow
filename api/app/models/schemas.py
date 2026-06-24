@@ -10,7 +10,9 @@ from __future__ import annotations
 from typing import Any, Literal
 
 # pyrefly: ignore [missing-import]
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+from app.core.event_types import EVENT_PAYLOAD_SCHEMAS, REGISTERED_EVENT_TYPES
 
 EventStatus = Literal["CREATED", "PROCESSING", "COMPLETED", "FAILED"]
 
@@ -23,16 +25,39 @@ class EventIn(BaseModel):
         min_length=1,
         max_length=64,
         description=(
-            "Dot-namespaced event type string, e.g. 'order.placed' or 'user.signup'. "
-            "The worker routes the event to a handler registered for this type."
+            "Registered event type string. "
+            f"Accepted values: {sorted(REGISTERED_EVENT_TYPES)}."
         ),
-        examples=["order.placed", "data.transform", "notify"],
+        examples=["ping", "data.transform", "notify"],
     )
     payload: dict[str, Any] = Field(
         default_factory=dict,
-        description="Arbitrary JSON payload. Stored in DynamoDB alongside the event record.",
+        description="JSON payload whose shape must match the schema for the chosen event type.",
         examples=[{"amount": 42, "currency": "USD"}],
     )
+
+    @field_validator("type")
+    @classmethod
+    def _type_must_be_registered(cls, v: str) -> str:
+        if v not in REGISTERED_EVENT_TYPES:
+            registered = sorted(REGISTERED_EVENT_TYPES)
+            raise ValueError(
+                f"Unknown event type {v!r}. "
+                f"Registered types: {registered}"
+            )
+        return v
+
+    @model_validator(mode="after")
+    def _payload_must_match_schema(self) -> EventIn:
+        """Validate payload shape against the per-type Pydantic schema."""
+        schema_cls = EVENT_PAYLOAD_SCHEMAS.get(self.type)
+        if schema_cls is None:
+            # type not in registry — _type_must_be_registered already raised
+            return self
+        # Re-parse the payload through the per-type schema.
+        # ValidationError propagates as a FastAPI 422 with structured detail.
+        schema_cls.model_validate(self.payload)
+        return self
 
 
 class EventOut(BaseModel):
