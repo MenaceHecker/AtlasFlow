@@ -12,7 +12,7 @@ from typing import Any
 from botocore.exceptions import ClientError
 
 from app.core.config import settings
-from app.services.aws_clients import ddb_resource, sqs_client
+from app.services.aws_clients import ddb_resource, s3_client, sqs_client
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +31,18 @@ def _events_table():
 
 def _idem_table():
     return ddb_resource().Table(settings.idem_table)
+
+
+def _should_offload(payload: dict[str, Any]) -> bool:
+    """Return True if the payload exceeds the configured byte threshold.
+
+    Only offloads when PAYLOAD_BUCKET is configured — if the bucket is not
+    set, payloads are always stored inline regardless of size.
+    """
+    if not settings.payload_bucket:
+        return False
+    payload_bytes = len(json.dumps(payload).encode())
+    return payload_bytes > settings.payload_offload_threshold_bytes
 
 
 @lru_cache(maxsize=1)
@@ -129,7 +141,7 @@ def _persist_and_enqueue(
     sqs = sqs_client()
 
     pk = f"EVENT#{event_id}"
-    item = {
+    item: dict[str, Any] = {
         "pk": pk,
         "event_id": event_id,
         "type": event_type,
@@ -137,8 +149,24 @@ def _persist_and_enqueue(
         "created_at": now_iso,
         "updated_at": now_iso,
         "attempts": 0,
-        "payload_inline": payload,
     }
+
+    if _should_offload(payload):
+        # Upload the payload to S3; store only the key in DynamoDB.
+        s3_key = f"payloads/{event_id}.json"
+        s3_client().put_object(
+            Bucket=settings.payload_bucket,
+            Key=s3_key,
+            Body=json.dumps(payload).encode(),
+            ContentType="application/json",
+        )
+        item["s3_key"] = s3_key
+        logger.info(
+            "Payload offloaded to S3",
+            extra={"event_id": event_id, "s3_key": s3_key, "bucket": settings.payload_bucket},
+        )
+    else:
+        item["payload_inline"] = payload
 
     events.put_item(Item=item)
 
@@ -154,6 +182,17 @@ def _persist_and_enqueue(
     except Exception:
         try:
             events.delete_item(Key={"pk": pk})
+            # Clean up the S3 object if we uploaded one
+            if "s3_key" in item:
+                try:
+                    s3_client().delete_object(
+                        Bucket=settings.payload_bucket, Key=item["s3_key"]
+                    )
+                except Exception:
+                    logger.exception(
+                        "Failed to remove S3 payload after SQS enqueue failure",
+                        extra={"event_id": event_id, "s3_key": item["s3_key"]},
+                    )
         except Exception:
             logger.exception(
                 "Failed to remove event after SQS enqueue failure",

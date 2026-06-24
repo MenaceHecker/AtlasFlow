@@ -44,3 +44,15 @@ def sqs_client():
         aws_access_key_id="test",
         aws_secret_access_key="test",
     )
+
+
+@lru_cache(maxsize=1)
+def s3_client():
+    return boto3.client(
+        "s3",
+        region_name=settings.aws_region,
+        endpoint_url=_endpoint_url(),
+        config=_boto_config(),
+        aws_access_key_id="test",
+        aws_secret_access_key="test",
+    )
