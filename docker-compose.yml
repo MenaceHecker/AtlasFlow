@@ -31,6 +31,7 @@ services:
       - EVENTS_QUEUE_NAME=${TF_VAR_project_name:-atlasflow}-events
       - EVENTS_TABLE=${TF_VAR_project_name:-atlasflow}-events
       - IDEMPOTENCY_TABLE=${TF_VAR_project_name:-atlasflow}-idempotency
+      - PAYLOAD_BUCKET=${PAYLOAD_BUCKET:-}
       - ADMIN_API_KEY=${ADMIN_API_KEY:-}
     ports:
       - "8000:8000"
@@ -48,6 +49,7 @@ services:
       - TF_VAR_project_name=${TF_VAR_project_name:-atlasflow}
       - EVENTS_QUEUE_NAME=${TF_VAR_project_name:-atlasflow}-events
       - EVENTS_TABLE=${TF_VAR_project_name:-atlasflow}-events
+      - PAYLOAD_BUCKET=${PAYLOAD_BUCKET:-}
       - POLL_WAIT_SECONDS=5
       - MAX_MESSAGES=5
       - VISIBILITY_TIMEOUT=30
