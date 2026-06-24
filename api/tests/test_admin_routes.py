@@ -4,6 +4,7 @@ Tests for /v1/admin routes — auth gating + DLQ replay logic.
 from __future__ import annotations
 
 import json
+
 import pytest
 
 VALID_KEY = "test-admin-key-abc123"
@@ -24,7 +25,9 @@ def api_client_with_key(aws_resources, monkeypatch):
     events_service._get_queue_url.cache_clear()
 
     # Reload settings so it picks up the monkeypatched env var
-    import importlib, app.core.config as cfg_mod
+    import importlib
+
+    import app.core.config as cfg_mod
     importlib.reload(cfg_mod)
     from app.core import dependencies as dep_mod
     importlib.reload(dep_mod)
@@ -51,7 +54,9 @@ def api_client_no_key(aws_resources, monkeypatch):
     from app.services import events_service
     events_service._get_queue_url.cache_clear()
 
-    import importlib, app.core.config as cfg_mod
+    import importlib
+
+    import app.core.config as cfg_mod
     importlib.reload(cfg_mod)
     from app.core import dependencies as dep_mod
     importlib.reload(dep_mod)

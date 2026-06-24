@@ -5,13 +5,13 @@ All AWS resources are mocked with moto — no LocalStack required.
 """
 from __future__ import annotations
 
-import os
 import json
+import os
 
 import boto3
 import pytest
-from moto import mock_aws
 from fastapi.testclient import TestClient
+from moto import mock_aws
 
 # ── point app at fake AWS before importing anything that touches boto3 ──────
 os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")

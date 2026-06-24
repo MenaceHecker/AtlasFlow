@@ -4,8 +4,8 @@ Unit tests for events_service.py
 from __future__ import annotations
 
 import json
-import pytest
 
+import pytest
 
 # ── create_event ──────────────────────────────────────────────────────────────
 
@@ -26,11 +26,10 @@ class TestCreateEvent:
         assert item["payload_inline"] == {"amount": 10}
 
     def test_enqueues_message_on_create(self, aws_resources):
-        from app.services.events_service import create_event
-        from app.services.aws_clients import sqs_client
-
         # clear cache so client uses mocked SQS
         from app.services import aws_clients
+        from app.services.aws_clients import sqs_client
+        from app.services.events_service import create_event
         aws_clients.sqs_client.cache_clear()
 
         event_id, _ = create_event("user.signup", {"email": "a@b.com"}, None)
@@ -200,6 +199,7 @@ class TestListEvents:
         """The cursor must not expose raw DynamoDB key values like 'EVENT#<uuid>'."""
         import base64
         import json
+
         from app.services.events_service import create_event, list_events
 
         for i in range(3):
@@ -218,6 +218,7 @@ class TestListEvents:
 
     def test_malformed_cursor_raises_value_error(self, aws_resources):
         import pytest
+
         from app.services.events_service import list_events
 
         with pytest.raises(ValueError, match="Invalid pagination cursor"):
