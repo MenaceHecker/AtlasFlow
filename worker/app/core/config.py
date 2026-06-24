@@ -28,6 +28,14 @@ class Settings:
         f"{os.getenv('TF_VAR_project_name', 'atlasflow')}-events",
     )
 
+    # S3 payload offload — set PAYLOAD_BUCKET to enable large-payload fetching.
+    # The worker reads s3_key from the DynamoDB item and fetches the payload
+    # from S3 before dispatching to the handler.
+    payload_bucket: str = os.getenv("PAYLOAD_BUCKET", "")  # type: ignore[assignment]
+    payload_offload_threshold_bytes: int = int(
+        os.getenv("PAYLOAD_OFFLOAD_THRESHOLD_BYTES", str(32 * 1024))  # 32 KB default
+    )
+
     # Worker polling behavior
     poll_wait_seconds: int = int(os.getenv("POLL_WAIT_SECONDS", "10"))
     max_messages: int = int(os.getenv("MAX_MESSAGES", "5"))

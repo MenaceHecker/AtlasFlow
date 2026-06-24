@@ -16,6 +16,15 @@ class Settings(BaseModel):
     idem_table: str = os.getenv("IDEMPOTENCY_TABLE", f"{_project}-idempotency")
     events_queue_name: str = os.getenv("EVENTS_QUEUE_NAME", f"{_project}-events")
 
+    # S3 payload offload — set PAYLOAD_BUCKET to enable large-payload storage.
+    # Payloads exceeding PAYLOAD_OFFLOAD_THRESHOLD_BYTES are uploaded to S3
+    # and only the S3 key is stored in DynamoDB, keeping items well under
+    # DynamoDB's 400 KB item limit.
+    payload_bucket: str = os.getenv("PAYLOAD_BUCKET", "")
+    payload_offload_threshold_bytes: int = int(
+        os.getenv("PAYLOAD_OFFLOAD_THRESHOLD_BYTES", str(32 * 1024))  # 32 KB default
+    )
+
     # Admin auth — set ADMIN_API_KEY to enable the /v1/admin endpoints.
     # Leaving it empty disables them (returns 503).
     admin_api_key: str = os.getenv("ADMIN_API_KEY", "")
