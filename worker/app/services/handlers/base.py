@@ -11,10 +11,22 @@ take over.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from typing import ClassVar
+
+from pydantic import BaseModel
 
 
 class BaseHandler(ABC):
-    """Abstract base for all event-type handlers."""
+    """Abstract base for all event-type handlers.
+
+    Class attributes:
+        payload_schema: Optional Pydantic model class describing the expected
+            payload shape. Set this on concrete handlers to enable structured
+            documentation and potential runtime validation. The API uses the
+            schemas in ``event_types.py`` (same models) for ingestion validation.
+    """
+
+    payload_schema: ClassVar[type[BaseModel] | None] = None
 
     @abstractmethod
     def handle(self, event_id: str, payload: dict) -> dict:
@@ -32,3 +44,4 @@ class BaseHandler(ABC):
             Exception: If processing fails. The exception propagates to the
                        worker loop so SQS can retry the message.
         """
+

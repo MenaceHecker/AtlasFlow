@@ -11,15 +11,45 @@ Handler inventory:
     data.transform  -- applies a key-value transformation to the payload
     notify          -- simulates sending an outbound notification
     * (fallback)    -- handles any unrecognised event type gracefully
+
+Each handler exposes a ``payload_schema`` class variable (a Pydantic model)
+matching the schema defined in the API's ``event_types.py``. The two must
+stay in sync when adding or changing event types.
 """
 from __future__ import annotations
 
 import logging
+from typing import Any
+
+from pydantic import BaseModel, Field
 
 from app.services.handlers.base import BaseHandler
 from app.services.handlers.registry import registry
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Payload schemas (worker-local copies — must stay in sync with API's
+# event_types.py so that API validation and worker dispatch agree on shape)
+# ---------------------------------------------------------------------------
+
+class PingPayload(BaseModel):
+    """ping — no required fields; any payload is accepted."""
+    model_config = {"extra": "allow"}
+
+
+class DataTransformPayload(BaseModel):
+    """data.transform — apply an operation to a set of string fields."""
+    fields: dict[str, Any] = Field(default_factory=dict)
+    operation: str = Field(default="uppercase")
+
+
+class NotifyPayload(BaseModel):
+    """notify — send an outbound notification via a channel."""
+    channel: str
+    recipient: str
+    message: str
 
 
 @registry.register("ping")
@@ -30,6 +60,8 @@ class PingHandler(BaseHandler):
     Accepts any payload and immediately returns a pong response. Useful for
     verifying the end-to-end pipeline is running without any side-effects.
     """
+
+    payload_schema = PingPayload
 
     def handle(self, event_id: str, payload: dict) -> dict:
         logger.info("PingHandler: event_id=%s", event_id)
@@ -55,6 +87,7 @@ class DataTransformHandler(BaseHandler):
     """
 
     OPERATIONS = ("uppercase", "lowercase", "reverse")
+    payload_schema = DataTransformPayload
 
     def handle(self, event_id: str, payload: dict) -> dict:
         fields: dict = payload.get("fields", {})
@@ -105,6 +138,7 @@ class NotifyHandler(BaseHandler):
     """
 
     SUPPORTED_CHANNELS = ("email", "sms", "push")
+    payload_schema = NotifyPayload
 
     def handle(self, event_id: str, payload: dict) -> dict:
         channel = payload.get("channel")
