@@ -53,6 +53,9 @@ services:
       - POLL_WAIT_SECONDS=5
       - MAX_MESSAGES=5
       - VISIBILITY_TIMEOUT=30
+      - METRICS_PORT=9090
+    ports:
+      - "9090:9090"
     depends_on:
       localstack:
         condition: service_healthy
