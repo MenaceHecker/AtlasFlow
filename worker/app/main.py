@@ -5,11 +5,15 @@ from app.core.logging_config import configure_logging
 configure_logging()  # must be first — sets up JSON formatter before any other import
 
 import logging  # noqa: E402
+import os  # noqa: E402
 import signal  # noqa: E402
 import threading  # noqa: E402
 import time  # noqa: E402
 
+from prometheus_client import start_http_server  # noqa: E402
+
 from app.core.config import settings  # noqa: E402
+from app.core.metrics import REGISTRY  # noqa: E402
 from app.services.aws_clients import sqs_client  # noqa: E402
 from app.services.processor import process_message  # noqa: E402
 
@@ -19,6 +23,8 @@ logger = logging.getLogger(__name__)
 # so it can exit cleanly without interrupting a message mid-processing.
 _shutdown = threading.Event()
 
+METRICS_PORT: int = int(os.getenv("METRICS_PORT", "9090"))
+
 
 def _handle_shutdown(signum: int, _frame: object) -> None:
     sig_name = signal.Signals(signum).name
@@ -27,6 +33,22 @@ def _handle_shutdown(signum: int, _frame: object) -> None:
         extra={"signal": sig_name},
     )
     _shutdown.set()
+
+
+def _start_metrics_server() -> None:
+    """Start the Prometheus HTTP server on METRICS_PORT in a daemon thread.
+
+    The server is non-blocking and runs until the process exits.
+    """
+    try:
+        start_http_server(port=METRICS_PORT, registry=REGISTRY)
+        logger.info("Prometheus metrics server started", extra={"port": METRICS_PORT})
+    except OSError as exc:
+        # Port in use (common in tests) — log a warning and continue.
+        logger.warning(
+            "Could not start metrics server; metrics will not be exposed",
+            extra={"port": METRICS_PORT, "error": str(exc)},
+        )
 
 
 def get_queue_url() -> str:
@@ -79,6 +101,7 @@ def run_forever() -> None:
 
 
 if __name__ == "__main__":
+    _start_metrics_server()
     # Small startup delay to let LocalStack settle.
     time.sleep(1.0)
     run_forever()

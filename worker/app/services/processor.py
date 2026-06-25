@@ -25,6 +25,7 @@ from typing import Any
 from botocore.exceptions import ClientError
 
 from app.core.config import settings
+from app.core.metrics import MESSAGES_PROCESSED, PROCESSING_DURATION
 from app.services.aws_clients import ddb_resource, s3_client
 
 logger = logging.getLogger(__name__)
@@ -142,6 +143,7 @@ def process_message(body: str) -> None:
             "Event not found in DynamoDB; skipping message",
             extra={"event_id": event_id},
         )
+        MESSAGES_PROCESSED.labels(event_type="unknown", outcome="skipped").inc()
         return
 
     event_type: str = item.get("type", "")
@@ -153,28 +155,35 @@ def process_message(body: str) -> None:
             "Event already claimed by another worker; skipping",
             extra={"event_id": event_id, "event_type": event_type},
         )
+        MESSAGES_PROCESSED.labels(event_type=event_type, outcome="skipped").inc()
         return
 
     try:
         result = registry.dispatch(event_type, event_id, payload)
         mark_completed(event_id, result)
+        elapsed = time.perf_counter() - t_start
+        MESSAGES_PROCESSED.labels(event_type=event_type, outcome="completed").inc()
+        PROCESSING_DURATION.labels(event_type=event_type).observe(elapsed)
         logger.info(
             "Event completed",
             extra={
                 "event_id": event_id,
                 "event_type": event_type,
-                "total_duration_ms": round((time.perf_counter() - t_start) * 1000, 2),
+                "total_duration_ms": round(elapsed * 1000, 2),
             },
         )
     except Exception as exc:
+        elapsed = time.perf_counter() - t_start
         mark_failed(event_id, str(exc))
+        MESSAGES_PROCESSED.labels(event_type=event_type, outcome="failed").inc()
+        PROCESSING_DURATION.labels(event_type=event_type).observe(elapsed)
         logger.error(
             "Event failed",
             extra={
                 "event_id": event_id,
                 "event_type": event_type,
                 "error": str(exc),
-                "total_duration_ms": round((time.perf_counter() - t_start) * 1000, 2),
+                "total_duration_ms": round(elapsed * 1000, 2),
             },
         )
         raise
