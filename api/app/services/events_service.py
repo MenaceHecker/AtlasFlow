@@ -12,6 +12,7 @@ from typing import Any
 from botocore.exceptions import ClientError
 
 from app.core.config import settings
+from app.core.metrics import EVENTS_INGESTED
 from app.services.aws_clients import ddb_resource, s3_client, sqs_client
 
 logger = logging.getLogger(__name__)
@@ -69,6 +70,7 @@ def create_event(
             extra={"event_id": event_id, "event_type": event_type},
         )
         _persist_and_enqueue(event_id, event_type, payload, now)
+        EVENTS_INGESTED.labels(event_type=event_type).inc()
         return event_id, False
 
     idem_pk = f"IDEMP#{idempotency_key}"
@@ -96,6 +98,7 @@ def create_event(
                 },
             )
             _persist_and_enqueue(new_event_id, event_type, payload, now)
+            EVENTS_INGESTED.labels(event_type=event_type).inc()
         except Exception:
             try:
                 idem.delete_item(
