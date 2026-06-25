@@ -19,22 +19,23 @@ export AWS_REGION
 export AWS_DEFAULT_REGION=$(AWS_REGION)
 export LOCALSTACK_ENDPOINT
 
-.PHONY: up down logs infra infra-destroy fmt validate smoke clean help test test-api test-worker api-logs api-shell worker-logs
+.PHONY: up down logs infra infra-destroy fmt validate smoke clean help test test-api test-worker test-integration api-logs api-shell worker-logs
 
 help:
 	@echo "Targets:"
-	@echo "  make up            Start LocalStack"
-	@echo "  make down          Stop LocalStack"
-	@echo "  make logs          Tail LocalStack logs"
-	@echo "  make infra         Terraform apply (LocalStack)"
-	@echo "  make infra-destroy Terraform destroy (LocalStack)"
-	@echo "  make validate      Terraform validate"
-	@echo "  make fmt           Terraform fmt"
-	@echo "  make smoke         Run smoke test (S3+SQS+DDB)"
-	@echo "  make clean         Tear down + destroy infra"
-	@echo "  make test          Run all unit tests (no LocalStack needed)"
-	@echo "  make test-api      Run only API tests"
-	@echo "  make test-worker   Run only worker tests"
+	@echo "  make up                Start LocalStack"
+	@echo "  make down              Stop LocalStack"
+	@echo "  make logs              Tail LocalStack logs"
+	@echo "  make infra             Terraform apply (LocalStack)"
+	@echo "  make infra-destroy     Terraform destroy (LocalStack)"
+	@echo "  make validate          Terraform validate"
+	@echo "  make fmt               Terraform fmt"
+	@echo "  make smoke             Run smoke test (S3+SQS+DDB)"
+	@echo "  make clean             Tear down + destroy infra"
+	@echo "  make test              Run all unit tests (no LocalStack needed)"
+	@echo "  make test-api          Run only API unit tests"
+	@echo "  make test-worker       Run only worker unit tests"
+	@echo "  make test-integration  Run integration tests (Docker required)"
 
 up:
 	@cp -n .env.example .env >/dev/null 2>&1 || true
@@ -84,3 +85,11 @@ test-worker:
 	cd worker && pip install -q -e ".[dev]" && pytest
 
 test: test-api test-worker
+
+test-integration: docker-check
+	@echo "Installing service packages..."
+	pip install -q -e "api/[dev]" -e "worker/[dev]"
+	@echo "Installing integration test dependencies..."
+	cd tests && pip install -q -e ".[dev]"
+	@echo "Running integration tests (requires Docker)..."
+	cd tests && pytest integration/ -v --tb=short
