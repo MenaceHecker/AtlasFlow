@@ -77,7 +77,7 @@ class TestDlqReplay:
         process_one(infra, event_id)
 
         item = wait_for_status(infra, event_id, "COMPLETED", timeout=10.0)
-        assert item["result"]["status"] == "pong"
+        assert item["result"]["pong"] is True
 
     def test_replay_skips_non_failed_event(self, env):
         """Events that are already COMPLETED are skipped during replay."""

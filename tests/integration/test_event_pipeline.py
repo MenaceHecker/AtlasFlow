@@ -24,7 +24,7 @@ class TestPingPipeline:
         process_one(infra, event_id)
 
         item = wait_for_status(infra, event_id, "COMPLETED")
-        assert item["result"]["status"] == "pong"
+        assert item["result"]["pong"] is True
         assert item["result"]["echo"] == {"hello": "world"}
 
     def test_ping_event_visible_via_get(self, env):

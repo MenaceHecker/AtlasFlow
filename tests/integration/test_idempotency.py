@@ -97,7 +97,7 @@ class TestIdempotency:
         process_one(infra, event_id)
 
         item = wait_for_status(infra, event_id, "COMPLETED")
-        assert item["result"]["status"] == "pong"
+        assert item["result"]["pong"] is True
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
