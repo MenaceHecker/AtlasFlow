@@ -29,6 +29,7 @@ from integration.helpers import (
     EVENTS_TABLE,
     IDEM_TABLE,
     PAYLOAD_BUCKET,
+    PROJECT,
     QUEUE_NAME,
     REGION,
 )
@@ -161,6 +162,9 @@ def env(infra, localstack_endpoint, monkeypatch):
     monkeypatch.setattr(api_config.settings, "idem_table", IDEM_TABLE)
     monkeypatch.setattr(api_config.settings, "events_queue_name", QUEUE_NAME)
     monkeypatch.setattr(api_config.settings, "admin_api_key", "inttest-admin-key")
+    # patch project_name so _dlq_name()/_main_queue_name() in admin.py
+    # resolve to the integration test queue names, not the default "atlasflow"
+    monkeypatch.setattr(api_config.settings, "project_name", PROJECT)
 
     # ── Worker service layer ───────────────────────────────────────────────
     from app.services import aws_clients as worker_aws_clients

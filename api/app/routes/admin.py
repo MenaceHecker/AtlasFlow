@@ -17,8 +17,12 @@ router = APIRouter(
     dependencies=[Depends(require_admin_key)],  # applied to every route in this router
 )
 
-DLQ_NAME = f"{settings.project_name}-dlq"
-MAIN_QUEUE_NAME = f"{settings.project_name}-events"
+def _dlq_name() -> str:
+    return f"{settings.project_name}-dlq"
+
+
+def _main_queue_name() -> str:
+    return f"{settings.project_name}-events"
 
 
 def _queue_url(queue_name: str) -> str:
@@ -66,8 +70,8 @@ def _set_replay_status(event_id: str, from_status: str, to_status: str) -> bool:
 def replay_dlq(max_messages: int = 10) -> DlqReplayResponse:
     sqs = sqs_client()
 
-    dlq_url = _queue_url(DLQ_NAME)
-    main_url = _queue_url(MAIN_QUEUE_NAME)
+    dlq_url = _queue_url(_dlq_name())
+    main_url = _queue_url(_main_queue_name())
 
     resp = sqs.receive_message(
         QueueUrl=dlq_url,
@@ -116,6 +120,6 @@ def replay_dlq(max_messages: int = 10) -> DlqReplayResponse:
     return DlqReplayResponse(
         replayed=replayed,
         skipped=skipped,
-        source_queue=DLQ_NAME,
-        destination_queue=MAIN_QUEUE_NAME,
+        source_queue=_dlq_name(),
+        destination_queue=_main_queue_name(),
     )

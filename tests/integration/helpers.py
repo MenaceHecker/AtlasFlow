@@ -21,10 +21,40 @@ def process_one(infra: dict, event_id: str) -> None:
     """
     Simulate the worker processing one event by calling process_message()
     directly against the real LocalStack DynamoDB and SQS.
-    """
-    from app.services.processor import process_message
 
-    process_message(json.dumps({"event_id": event_id}))
+    Both the API (api/app/) and the worker (worker/app/) share the `app`
+    package namespace. In the integration test process the API package is
+    loaded first, so we must temporarily put the worker directory first on
+    sys.path and clear cached `app.*` modules before importing the worker's
+    process_message — then restore everything so subsequent API calls work.
+    """
+    import pathlib
+    import sys
+
+    worker_dir = str(pathlib.Path(__file__).parents[3] / "worker")
+
+    # Snapshot current state
+    saved_path = sys.path[:]
+    saved_modules = {k: v for k, v in sys.modules.items() if k.startswith("app")}
+
+    # Put worker first so its `app` package wins
+    sys.path = [worker_dir] + [p for p in sys.path if p != worker_dir]
+    # Evict any api `app.*` modules from the cache
+    for key in list(sys.modules.keys()):
+        if key.startswith("app"):
+            del sys.modules[key]
+
+    try:
+        from app.services.processor import process_message  # noqa: PLC0415
+
+        process_message(json.dumps({"event_id": event_id}))
+    finally:
+        # Restore path and re-register api app modules
+        sys.path = saved_path
+        for key in list(sys.modules.keys()):
+            if key.startswith("app"):
+                del sys.modules[key]
+        sys.modules.update(saved_modules)
 
 
 def wait_for_status(
