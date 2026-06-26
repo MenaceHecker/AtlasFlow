@@ -1,41 +1,37 @@
 """
-Shared fixtures for AtlasFlow integration tests.
+Shared pytest fixtures for AtlasFlow integration tests.
 
 These tests spin up a REAL LocalStack container via testcontainers-python and
 exercise the full pipeline without any mocks.
 
 Prerequisites:
   - Docker must be running.
-  - The api/ and worker/ packages must be importable (pip install -e api/ -e worker/).
+  - Both api/ and worker/ packages must be installed (pip install -e api/ -e worker/).
 
-The conftest:
-  1. Starts LocalStack (session-scoped — one container for the full test run).
-  2. Creates DynamoDB tables + SQS queues by calling the API service layer directly.
-  3. Provides:
-     - `localstack_endpoint`  — the host:port for LocalStack.
-     - `aws_session`          — a boto3 session pointed at LocalStack.
-     - `events_table`         — a DynamoDB Table resource handle.
-     - `sqs_q`                — the events queue URL.
-     - `process_one`          — helper that drains one SQS message through the worker processor.
+Fixture hierarchy:
+  localstack        (session) — starts the LocalStack container
+  localstack_endpoint (session)
+  aws_session       (session)
+  infra             (session) — creates DDB tables + SQS queues + S3 bucket once
+  env               (function) — wires API + worker service layers to LocalStack,
+                                 yields {"client": TestClient, "infra": infra}
 """
 from __future__ import annotations
 
 import json
-import time
 
 import boto3
 import pytest
 from testcontainers.localstack import LocalStackContainer
 
-# ── constants ─────────────────────────────────────────────────────────────────
-
-REGION = "us-east-1"
-PROJECT = "atlasflow-inttest"
-EVENTS_TABLE = f"{PROJECT}-events"
-IDEM_TABLE = f"{PROJECT}-idempotency"
-QUEUE_NAME = f"{PROJECT}-events"
-DLQ_NAME = f"{PROJECT}-dlq"
-PAYLOAD_BUCKET = f"{PROJECT}-payloads"
+from integration.helpers import (
+    DLQ_NAME,
+    EVENTS_TABLE,
+    IDEM_TABLE,
+    PAYLOAD_BUCKET,
+    QUEUE_NAME,
+    REGION,
+)
 
 LOCALSTACK_IMAGE = "localstack/localstack:3.2"
 
@@ -146,7 +142,7 @@ def env(infra, localstack_endpoint, monkeypatch):
     monkeypatch.setenv("EVENTS_TABLE", EVENTS_TABLE)
     monkeypatch.setenv("IDEMPOTENCY_TABLE", IDEM_TABLE)
     monkeypatch.setenv("EVENTS_QUEUE_NAME", QUEUE_NAME)
-    monkeypatch.setenv("PAYLOAD_BUCKET", "")  # inline by default
+    monkeypatch.setenv("PAYLOAD_BUCKET", "")
     monkeypatch.setenv("ADMIN_API_KEY", "inttest-admin-key")
 
     # ── API service layer ──────────────────────────────────────────────────
@@ -158,8 +154,8 @@ def env(infra, localstack_endpoint, monkeypatch):
     api_aws_clients.s3_client.cache_clear()
     events_service._get_queue_url.cache_clear()
 
-    # Patch the API's settings to point at LocalStack
     from app.core import config as api_config
+
     monkeypatch.setattr(api_config.settings, "localstack_endpoint", localstack_endpoint)
     monkeypatch.setattr(api_config.settings, "events_table", EVENTS_TABLE)
     monkeypatch.setattr(api_config.settings, "idem_table", IDEM_TABLE)
@@ -168,68 +164,22 @@ def env(infra, localstack_endpoint, monkeypatch):
 
     # ── Worker service layer ───────────────────────────────────────────────
     from app.services import aws_clients as worker_aws_clients
+
     worker_aws_clients.ddb_resource.cache_clear()
     worker_aws_clients.sqs_client.cache_clear()
     worker_aws_clients.s3_client.cache_clear()
 
     from app.core import config as worker_config
+
     monkeypatch.setattr(worker_config.settings, "localstack_endpoint", localstack_endpoint)
     monkeypatch.setattr(worker_config.settings, "events_table", EVENTS_TABLE)
     monkeypatch.setattr(worker_config.settings, "events_queue_name", QUEUE_NAME)
 
     from app.main import app
     from fastapi.testclient import TestClient
+
     with TestClient(app) as client:
         yield {
             "client": client,
             "infra": infra,
         }
-
-
-# ── helpers ───────────────────────────────────────────────────────────────────
-
-def drain_queue(infra) -> list[dict]:
-    """
-    Drain all messages from the events SQS queue and return their parsed bodies.
-    Does NOT delete messages — call process_one() to do a full round-trip.
-    """
-    sqs = infra["sqs"]
-    messages = []
-    for _ in range(10):  # max 10 receive attempts
-        resp = sqs.receive_message(
-            QueueUrl=infra["queue_url"],
-            MaxNumberOfMessages=10,
-            WaitTimeSeconds=0,
-        )
-        batch = resp.get("Messages", [])
-        if not batch:
-            break
-        messages.extend(batch)
-    return messages
-
-
-def process_one(infra, event_id: str) -> None:
-    """
-    Simulate the worker processing one event by calling process_message()
-    directly against the real LocalStack DynamoDB and SQS.
-    """
-    import json
-
-    from app.services.processor import process_message
-    process_message(json.dumps({"event_id": event_id}))
-
-
-def wait_for_status(
-    infra, event_id: str, expected_status: str, timeout: float = 10.0
-) -> dict:
-    """Poll DynamoDB until the event reaches the expected status or timeout."""
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        resp = infra["events_table"].get_item(Key={"pk": f"EVENT#{event_id}"})
-        item = resp.get("Item")
-        if item and item.get("status") == expected_status:
-            return item
-        time.sleep(0.2)
-    raise TimeoutError(
-        f"Event {event_id} did not reach status={expected_status!r} within {timeout}s"
-    )

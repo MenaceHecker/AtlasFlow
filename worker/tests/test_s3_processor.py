@@ -11,9 +11,6 @@ from __future__ import annotations
 import json
 import uuid
 
-from tests.conftest import PAYLOAD_BUCKET, _seed_event
-
-
 # ── _resolve_payload ──────────────────────────────────────────────────────────
 
 class TestResolvePayload:
@@ -30,7 +27,7 @@ class TestResolvePayload:
 
     def test_s3_key_fetches_from_s3(self, aws_resources, monkeypatch):
         """When s3_key is present, payload is fetched from S3."""
-        from app.services import processor, aws_clients
+        from app.services import aws_clients, processor
 
         bucket = aws_resources["payload_bucket"]
         s3_key = "payloads/test-event-123.json"
@@ -65,7 +62,7 @@ class TestResolvePayload:
 class TestProcessMessageWithS3:
     def test_s3_offloaded_event_dispatched_correctly(self, aws_resources, monkeypatch):
         """Full flow: event with s3_key is fetched from S3 and dispatched to PingHandler."""
-        from app.services import processor, aws_clients
+        from app.services import aws_clients, processor
 
         bucket = aws_resources["payload_bucket"]
         event_id = str(uuid.uuid4())

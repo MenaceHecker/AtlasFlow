@@ -8,7 +8,7 @@ No mocks. Real DynamoDB, SQS, S3 backed by LocalStack.
 """
 from __future__ import annotations
 
-from tests.integration.conftest import process_one, wait_for_status
+from integration.helpers import process_one, wait_for_status
 
 
 class TestPingPipeline:

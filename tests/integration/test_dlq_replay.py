@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 
-from tests.integration.conftest import DLQ_NAME, process_one, wait_for_status
+from integration.helpers import DLQ_NAME, process_one, wait_for_status
 
 ADMIN_KEY = "inttest-admin-key"
 
