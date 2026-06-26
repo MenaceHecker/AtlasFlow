@@ -31,7 +31,7 @@ def process_one(infra: dict, event_id: str) -> None:
     import pathlib
     import sys
 
-    worker_dir = str(pathlib.Path(__file__).parents[3] / "worker")
+    worker_dir = str(pathlib.Path(__file__).parents[2] / "worker")
 
     # Snapshot current state
     saved_path = sys.path[:]
